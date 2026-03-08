@@ -1,0 +1,1001 @@
+<!DOCTYPE html>
+<html lang="ku" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Shea Cinema · شێا سینەما</title>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Kufi+Arabic:wght@300;400;500;600;700;900&family=Playfair+Display:wght@700;900&display=swap" rel="stylesheet">
+<style>
+:root {
+  --cream: #0d0d0d;
+  --cream2: #161616;
+  --cream3: #222222;
+  --warm: #2a2a2a;
+  --gold: #e63030;
+  --gold-light: #ff6b6b;
+  --gold-dark: #c0392b;
+  --text: #f0f0f0;
+  --text2: #cccccc;
+  --text3: #888888;
+  --red: #e63030;
+  --shadow: rgba(0,0,0,0.5);
+}
+* { margin:0; padding:0; box-sizing:border-box; }
+html { scroll-behavior: smooth; }
+body {
+  background: var(--cream);
+  color: var(--text);
+  font-family: 'Noto Kufi Arabic', sans-serif;
+  direction: rtl;
+  overflow-x: hidden;
+}
+::-webkit-scrollbar { width: 5px; }
+::-webkit-scrollbar-track { background: var(--cream2); }
+::-webkit-scrollbar-thumb { background: var(--gold); border-radius: 3px; }
+
+/* NAV */
+nav {
+  position: fixed; top: 0; left: 0; right: 0;
+  z-index: 1000; height: 70px;
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 0 5%;
+  background: rgba(10,10,10,0.95);
+  backdrop-filter: blur(16px);
+  border-bottom: 1px solid rgba(230,48,48,0.2);
+  transition: box-shadow 0.3s;
+}
+nav.scrolled { box-shadow: 0 4px 30px var(--shadow); }
+.logo { display: flex; align-items: center; gap: 10px; cursor: pointer; text-decoration: none; }
+.logo-icon {
+  width: 38px; height: 38px;
+  background: linear-gradient(135deg, #e63030, #c0392b);
+  border-radius: 8px;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 1.2rem;
+  box-shadow: 0 2px 12px rgba(230,48,48,0.4);
+}
+.logo-text { font-family: 'Playfair Display', serif; font-size: 1.4rem; font-weight: 900; color: var(--text); }
+.logo-text span { color: var(--red); }
+.nav-links { display: flex; gap: 28px; list-style: none; }
+.nav-links a {
+  color: var(--text2); text-decoration: none; font-size: 0.85rem;
+  font-weight: 500; padding-bottom: 2px;
+  border-bottom: 2px solid transparent; transition: all 0.2s;
+}
+.nav-links a:hover, .nav-links a.active { color: #fff; border-bottom-color: var(--red); }
+.nav-right { display: flex; align-items: center; gap: 12px; }
+.search-wrap {
+  display: flex; align-items: center;
+  background: var(--cream2); border: 1.5px solid var(--cream3);
+  border-radius: 24px; padding: 7px 14px; gap: 8px;
+  transition: border-color 0.2s, box-shadow 0.2s;
+}
+.search-wrap:focus-within { border-color: var(--red); box-shadow: 0 0 0 3px rgba(230,48,48,0.15); }
+.search-wrap input {
+  background: none; border: none; outline: none;
+  font-family: inherit; font-size: 0.82rem; color: var(--text); width: 140px; direction: rtl;
+}
+.search-wrap input::placeholder { color: var(--text3); }
+
+/* HERO */
+.hero {
+  margin-top: 70px; min-height: calc(100vh - 70px);
+  display: grid; grid-template-columns: 1fr 1fr;
+  align-items: center; padding: 60px 5%; gap: 60px;
+  position: relative; overflow: hidden;
+}
+.hero::before {
+  content: ''; position: absolute; top: -100px; left: -100px;
+  width: 500px; height: 500px;
+  background: radial-gradient(circle, rgba(230,48,48,0.1) 0%, transparent 70%);
+  border-radius: 50%; pointer-events: none;
+}
+.hero::after {
+  content: ''; position: absolute; bottom: -80px; right: 10%;
+  width: 400px; height: 400px;
+  background: radial-gradient(circle, rgba(230,48,48,0.08) 0%, transparent 70%);
+  border-radius: 50%; pointer-events: none;
+}
+.hero-left { position: relative; z-index: 1; }
+.hero-eyebrow {
+  display: inline-flex; align-items: center; gap: 8px;
+  background: rgba(230,48,48,0.12); border: 1px solid rgba(230,48,48,0.3);
+  border-radius: 20px; padding: 5px 14px;
+  font-size: 0.75rem; font-weight: 600; color: #ff6b6b;
+  margin-bottom: 20px; animation: fadeUp 0.6s ease 0.1s both;
+}
+.hero-title {
+  font-size: clamp(2.8rem, 5vw, 4.2rem); font-weight: 900;
+  line-height: 1.1; margin-bottom: 20px; color: var(--text);
+  animation: fadeUp 0.6s ease 0.2s both;
+}
+.hero-title .accent { color: var(--red); }
+.hero-subtitle {
+  font-size: 1rem; color: var(--text2); line-height: 1.75;
+  margin-bottom: 36px; max-width: 460px;
+  animation: fadeUp 0.6s ease 0.3s both;
+}
+.hero-stats { display: flex; gap: 32px; margin-bottom: 36px; animation: fadeUp 0.6s ease 0.4s both; }
+.stat { text-align: right; }
+.stat-num { font-size: 1.8rem; font-weight: 900; color: var(--text); font-family: 'Playfair Display', serif; }
+.stat-num span { color: var(--red); }
+.stat-label { font-size: 0.75rem; color: var(--text3); margin-top: 2px; }
+.hero-btns { display: flex; gap: 14px; animation: fadeUp 0.6s ease 0.5s both; }
+.btn-primary {
+  display: flex; align-items: center; gap: 10px;
+  background: var(--red); color: #fff; border: none;
+  border-radius: 12px; padding: 14px 28px;
+  font-family: inherit; font-size: 0.95rem; font-weight: 700;
+  cursor: pointer; transition: transform 0.2s, box-shadow 0.2s;
+  box-shadow: 0 4px 20px rgba(230,48,48,0.4);
+}
+.btn-primary:hover { transform: translateY(-2px); box-shadow: 0 8px 30px rgba(230,48,48,0.5); }
+.btn-secondary {
+  display: flex; align-items: center; gap: 10px;
+  background: transparent; color: var(--text);
+  border: 2px solid rgba(255,255,255,0.15);
+  border-radius: 12px; padding: 14px 28px;
+  font-family: inherit; font-size: 0.95rem; font-weight: 600;
+  cursor: pointer; transition: all 0.2s;
+}
+.btn-secondary:hover { border-color: var(--red); color: #ff6b6b; }
+.hero-right { position: relative; z-index: 1; animation: fadeLeft 0.8s ease 0.3s both; }
+.featured-card {
+  background: #1a1a1a; border-radius: 20px; overflow: hidden;
+  box-shadow: 0 20px 60px rgba(0,0,0,0.6), 0 4px 20px rgba(230,48,48,0.1);
+  position: relative; border: 1px solid rgba(255,255,255,0.06);
+}
+.featured-poster {
+  width: 100%; height: 380px;
+  background: linear-gradient(160deg, #0d0d0d 0%, #1a0505 30%, #3d0a0a 60%, #c0392b 100%);
+  display: flex; align-items: center; justify-content: center;
+  font-size: 5rem; position: relative; overflow: hidden;
+}
+.featured-poster::after {
+  content: ''; position: absolute; inset: 0;
+  background: linear-gradient(to top, rgba(0,0,0,0.6) 0%, transparent 60%);
+}
+.featured-poster-label { position: absolute; bottom: 0; left: 0; right: 0; padding: 24px; z-index: 1; color: #fff; }
+.featured-poster-label h3 { font-size: 1.5rem; font-weight: 800; margin-bottom: 4px; }
+.featured-poster-label p { font-size: 0.8rem; opacity: 0.8; }
+.featured-info { padding: 20px 24px; display: flex; align-items: center; justify-content: space-between; }
+.featured-meta { display: flex; gap: 12px; align-items: center; }
+.badge { background: rgba(230,48,48,0.15); color: #ff6b6b; border-radius: 6px; padding: 3px 10px; font-size: 0.72rem; font-weight: 600; }
+.badge.red { background: rgba(230,48,48,0.2); color: #ff6b6b; }
+.rating-big { font-size: 1.1rem; font-weight: 900; color: var(--text); }
+.rating-big span { color: var(--red); }
+.play-btn {
+  width: 48px; height: 48px; background: var(--red);
+  border: none; border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  cursor: pointer; transition: transform 0.2s, background 0.2s;
+  box-shadow: 0 4px 16px rgba(230,48,48,0.4);
+}
+.play-btn:hover { transform: scale(1.1); background: #ff3333; }
+.float-card {
+  position: absolute; background: #1e1e1e;
+  border: 1px solid rgba(255,255,255,0.08); border-radius: 12px;
+  padding: 12px 16px; box-shadow: 0 8px 30px rgba(0,0,0,0.5);
+  animation: float 3s ease-in-out infinite; z-index: 10;
+}
+.float-card:nth-child(1) { bottom: -20px; right: -20px; animation-delay: 0s; }
+.float-card:nth-child(2) { top: 60px; left: -30px; animation-delay: 1.5s; }
+.float-card .fc-label { font-size: 0.68rem; color: var(--text3); }
+.float-card .fc-val { font-size: 0.9rem; font-weight: 700; color: var(--text); margin-top: 2px; }
+.float-card .fc-icon { font-size: 1.1rem; margin-bottom: 4px; }
+
+/* GENRE */
+.genre-section { padding: 0 5% 0; margin-top: -20px; }
+.genre-bar { display: flex; gap: 10px; overflow-x: auto; scrollbar-width: none; padding-bottom: 4px; }
+.genre-bar::-webkit-scrollbar { display: none; }
+.pill {
+  flex-shrink: 0; background: #1a1a1a;
+  border: 1.5px solid rgba(255,255,255,0.1); color: var(--text2);
+  border-radius: 20px; padding: 7px 20px;
+  font-family: inherit; font-size: 0.8rem; font-weight: 500;
+  cursor: pointer; transition: all 0.2s; white-space: nowrap;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.3);
+}
+.pill:hover { border-color: var(--red); color: #ff6b6b; }
+.pill.active { background: var(--red); color: #fff; border-color: var(--red); }
+
+/* SECTIONS */
+.section { padding: 50px 5% 0; }
+.section-head {
+  display: flex; align-items: flex-end; justify-content: space-between;
+  margin-bottom: 24px; border-bottom: 1.5px solid rgba(255,255,255,0.07); padding-bottom: 16px;
+}
+.section-head h2 { font-size: 1.3rem; font-weight: 800; color: var(--text); }
+.section-head h2 em { font-style: normal; color: var(--red); }
+.see-all {
+  font-size: 0.8rem; font-weight: 600; color: var(--red);
+  cursor: pointer; text-decoration: none;
+  display: flex; align-items: center; gap: 4px; transition: gap 0.2s;
+}
+.see-all:hover { gap: 8px; }
+
+/* CARDS */
+.cards-scroll { display: flex; gap: 16px; overflow-x: auto; padding-bottom: 12px; scrollbar-width: none; }
+.cards-scroll::-webkit-scrollbar { display: none; }
+.card { flex-shrink: 0; width: 170px; cursor: pointer; position: relative; transition: transform 0.3s; }
+.card:hover { transform: translateY(-6px); }
+.card:hover .card-img { box-shadow: 0 16px 40px var(--shadow); }
+.card-img {
+  width: 100%; aspect-ratio: 2/3; border-radius: 12px;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 2.5rem; position: relative; overflow: hidden;
+  transition: box-shadow 0.3s; box-shadow: 0 4px 16px var(--shadow);
+}
+.card-overlay {
+  position: absolute; inset: 0;
+  background: linear-gradient(to top, rgba(0,0,0,0.9) 0%, transparent 55%);
+  border-radius: 12px; opacity: 0; transition: opacity 0.3s;
+  display: flex; flex-direction: column; justify-content: flex-end; padding: 14px;
+}
+.card:hover .card-overlay { opacity: 1; }
+.card-overlay-btn {
+  width: 40px; height: 40px; background: var(--red);
+  border: none; border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  cursor: pointer; margin-bottom: 8px; transition: transform 0.2s;
+  box-shadow: 0 2px 12px rgba(230,48,48,0.5);
+}
+.card-overlay-btn:hover { transform: scale(1.15); }
+.card-overlay-rating { font-size: 0.72rem; color: #ff6b6b; font-weight: 700; }
+.card-overlay-genre { font-size: 0.68rem; color: rgba(255,255,255,0.7); }
+.card-rating-badge {
+  position: absolute; top: 10px; left: 10px;
+  background: rgba(255,255,255,0.92); border-radius: 6px;
+  padding: 2px 8px; font-size: 0.68rem; font-weight: 700;
+  color: #111; backdrop-filter: blur(4px);
+}
+.card-rating-badge .star { color: var(--red); }
+.card-body { padding: 10px 2px 0; }
+.card-title { font-size: 0.82rem; font-weight: 700; color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.card-sub { font-size: 0.72rem; color: var(--text3); margin-top: 3px; }
+
+/* INFO BANNER */
+.info-banner {
+  margin: 50px 5% 0;
+  background: linear-gradient(135deg, #1a0505 0%, #3d0a0a 50%, #c0392b 100%);
+  border-radius: 20px; padding: 48px;
+  display: flex; align-items: center; justify-content: center;
+  position: relative; overflow: hidden;
+  border: 1px solid rgba(230,48,48,0.2); text-align: center;
+}
+.info-banner::before {
+  content: '🎬'; position: absolute; right: 40px; top: 50%;
+  transform: translateY(-50%); font-size: 8rem; opacity: 0.06;
+}
+.ib-text h2 { font-size: 1.8rem; font-weight: 900; color: #fff; margin-bottom: 8px; }
+.ib-text p { color: rgba(255,255,255,0.75); font-size: 0.9rem; max-width: 480px; line-height: 1.6; }
+
+/* ===== VIDEO PLAYER MODAL ===== */
+.player-overlay {
+  position: fixed; inset: 0;
+  background: rgba(0,0,0,0.92);
+  z-index: 2000;
+  display: flex; align-items: center; justify-content: center;
+  opacity: 0; pointer-events: none;
+  transition: opacity 0.35s;
+  backdrop-filter: blur(10px);
+}
+.player-overlay.open { opacity: 1; pointer-events: all; }
+
+.player-modal {
+  background: #0d0d0d;
+  border: 1px solid rgba(230,48,48,0.2);
+  border-radius: 20px;
+  width: 95%;
+  max-width: 900px;
+  max-height: 92vh;
+  overflow: hidden;
+  box-shadow: 0 40px 100px rgba(0,0,0,0.9), 0 0 60px rgba(230,48,48,0.1);
+  transform: scale(0.94) translateY(24px);
+  transition: transform 0.35s cubic-bezier(0.34,1.56,0.64,1);
+  display: flex; flex-direction: column;
+}
+.player-overlay.open .player-modal {
+  transform: scale(1) translateY(0);
+}
+
+/* Video area */
+.player-screen {
+  width: 100%;
+  background: #000;
+  position: relative;
+  aspect-ratio: 16/9;
+  display: flex; align-items: center; justify-content: center;
+  overflow: hidden;
+}
+.player-screen iframe,
+.player-screen video {
+  width: 100%; height: 100%;
+  border: none; display: block;
+}
+
+/* Placeholder when no video */
+.player-placeholder {
+  width: 100%; height: 100%;
+  display: flex; flex-direction: column;
+  align-items: center; justify-content: center;
+  gap: 16px;
+  background: linear-gradient(160deg, #0d0d0d, #1a0505, #3d0a0a);
+}
+.player-placeholder .big-icon { font-size: 5rem; opacity: 0.4; }
+.player-placeholder p { color: var(--text3); font-size: 0.9rem; text-align: center; }
+.player-placeholder .add-link-btn {
+  background: var(--red); color: #fff; border: none;
+  border-radius: 10px; padding: 10px 24px;
+  font-family: inherit; font-size: 0.85rem; font-weight: 700;
+  cursor: pointer; transition: transform 0.2s;
+  margin-top: 8px;
+}
+.player-placeholder .add-link-btn:hover { transform: translateY(-2px); }
+
+/* Player info bar */
+.player-info {
+  padding: 18px 24px;
+  display: flex; align-items: flex-start; justify-content: space-between;
+  gap: 16px; border-top: 1px solid rgba(255,255,255,0.06);
+  background: #111;
+}
+.player-info-left { flex: 1; }
+.player-film-title { font-size: 1.15rem; font-weight: 800; color: var(--text); margin-bottom: 6px; }
+.player-film-meta { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+.player-badge {
+  background: rgba(230,48,48,0.15); color: #ff6b6b;
+  border-radius: 6px; padding: 2px 10px;
+  font-size: 0.7rem; font-weight: 700;
+}
+.player-rating { font-size: 0.8rem; color: #ff6b6b; font-weight: 700; }
+.player-year { font-size: 0.78rem; color: var(--text3); }
+.player-desc { font-size: 0.8rem; color: var(--text3); margin-top: 8px; line-height: 1.6; max-width: 580px; }
+
+.player-close {
+  width: 36px; height: 36px; flex-shrink: 0;
+  background: rgba(255,255,255,0.07);
+  border: 1px solid rgba(255,255,255,0.1);
+  border-radius: 50%; cursor: pointer;
+  font-size: 1rem; color: var(--text2);
+  display: flex; align-items: center; justify-content: center;
+  transition: background 0.2s, color 0.2s;
+}
+.player-close:hover { background: rgba(230,48,48,0.2); color: #ff6b6b; }
+
+/* Link input area */
+.player-link-area {
+  padding: 14px 24px;
+  background: #0d0d0d;
+  border-top: 1px solid rgba(255,255,255,0.05);
+  display: flex; gap: 10px; align-items: center;
+}
+.player-link-area input {
+  flex: 1;
+  background: #1a1a1a; border: 1.5px solid rgba(255,255,255,0.1);
+  border-radius: 10px; padding: 9px 14px;
+  font-family: inherit; font-size: 0.82rem; color: var(--text);
+  outline: none; direction: ltr; transition: border-color 0.2s;
+}
+.player-link-area input:focus { border-color: var(--red); }
+.player-link-area input::placeholder { color: var(--text3); }
+.player-link-btn {
+  background: var(--red); color: #fff; border: none;
+  border-radius: 10px; padding: 9px 18px;
+  font-family: inherit; font-size: 0.8rem; font-weight: 700;
+  cursor: pointer; white-space: nowrap;
+  transition: transform 0.2s, box-shadow 0.2s;
+  box-shadow: 0 2px 10px rgba(230,48,48,0.3);
+}
+.player-link-btn:hover { transform: translateY(-1px); box-shadow: 0 4px 16px rgba(230,48,48,0.45); }
+
+/* ===== ADMIN PANEL ===== */
+.admin-overlay {
+  position: fixed; inset: 0;
+  background: rgba(0,0,0,0.88);
+  z-index: 3000;
+  display: flex; align-items: center; justify-content: center;
+  opacity: 0; pointer-events: none;
+  transition: opacity 0.3s;
+  backdrop-filter: blur(8px);
+}
+.admin-overlay.open { opacity: 1; pointer-events: all; }
+.admin-modal {
+  background: #111;
+  border: 1px solid rgba(230,48,48,0.3);
+  border-radius: 16px;
+  width: 95%; max-width: 560px;
+  max-height: 85vh; overflow-y: auto;
+  box-shadow: 0 30px 80px rgba(0,0,0,0.9), 0 0 40px rgba(230,48,48,0.1);
+  transform: scale(0.94) translateY(20px);
+  transition: transform 0.3s cubic-bezier(0.34,1.56,0.64,1);
+  padding: 24px;
+}
+.admin-overlay.open .admin-modal { transform: scale(1) translateY(0); }
+.admin-header {
+  display: flex; align-items: center; justify-content: space-between;
+  margin-bottom: 20px;
+  font-size: 1rem; font-weight: 800; color: var(--red);
+}
+.admin-label { font-size: 0.82rem; color: var(--text3); margin-bottom: 10px; }
+.admin-input-row { display: flex; gap: 10px; margin-bottom: 8px; }
+.admin-input-row input {
+  flex: 1; background: #1a1a1a;
+  border: 1.5px solid rgba(255,255,255,0.1);
+  border-radius: 10px; padding: 10px 14px;
+  font-family: inherit; font-size: 0.82rem; color: var(--text);
+  outline: none; transition: border-color 0.2s;
+}
+.admin-input-row input:focus { border-color: var(--red); }
+.admin-err { font-size: 0.78rem; color: #ff4444; min-height: 18px; }
+.admin-saved { font-size: 0.78rem; color: #44cc88; margin-top: 6px; }
+.admin-film-list {
+  display: flex; flex-direction: column; gap: 8px;
+  max-height: 300px; overflow-y: auto;
+  margin-bottom: 16px; scrollbar-width: thin;
+}
+.admin-film-item {
+  display: flex; align-items: center; justify-content: space-between;
+  background: #1a1a1a; border: 1px solid rgba(255,255,255,0.07);
+  border-radius: 10px; padding: 10px 14px;
+  cursor: pointer; transition: border-color 0.2s, background 0.2s;
+}
+.admin-film-item:hover { border-color: var(--red); background: #1e1010; }
+.admin-film-item.selected { border-color: var(--red); background: rgba(230,48,48,0.08); }
+.afilm-name { font-size: 0.85rem; font-weight: 700; color: var(--text); }
+.afilm-meta { font-size: 0.72rem; color: var(--text3); margin-top: 2px; }
+.afilm-status {
+  font-size: 0.68rem; padding: 3px 10px; border-radius: 20px;
+  font-weight: 700; white-space: nowrap;
+}
+.afilm-status.has-link { background: rgba(68,204,136,0.15); color: #44cc88; }
+.afilm-status.no-link  { background: rgba(230,48,48,0.15);  color: #ff6b6b; }
+.admin-edit-box {
+  background: #161616; border: 1px solid rgba(230,48,48,0.2);
+  border-radius: 12px; padding: 16px; margin-top: 4px;
+}
+.admin-edit-title { font-size: 0.9rem; font-weight: 800; color: var(--text); margin-bottom: 10px; }
+.admin-section-title {
+  font-size: 0.72rem; font-weight: 700; color: var(--text3);
+  letter-spacing: 1px; margin: 14px 0 8px; padding-bottom: 6px;
+  border-bottom: 1px solid rgba(255,255,255,0.06);
+}
+.admin-trigger {
+  position: fixed; bottom: 20px; left: 20px;
+  width: 36px; height: 36px;
+  background: rgba(255,255,255,0.02);
+  border: 1px solid rgba(255,255,255,0.05);
+  border-radius: 50%; cursor: pointer;
+  font-size: 0.7rem; color: transparent;
+  z-index: 999; transition: all 0.3s;
+}
+.admin-trigger:hover { background: rgba(230,48,48,0.15); color: var(--red); border-color: var(--red); }
+
+/* FOOTER */
+footer {
+  margin-top: 70px; background: #000;
+  color: rgba(250,247,242,0.6);
+  padding: 48px 5% 30px;
+  border-top: 1px solid rgba(230,48,48,0.2);
+}
+.footer-top { display: flex; gap: 48px; margin-bottom: 32px; flex-wrap: wrap; }
+.footer-logo-wrap { flex: 0 0 220px; }
+.footer-desc { font-size: 0.8rem; color: rgba(250,247,242,0.5); line-height: 1.7; margin-bottom: 16px; }
+.footer-links-col { flex: 1; min-width: 120px; }
+.footer-links-col h4 { font-size: 0.82rem; font-weight: 700; color: var(--text); margin-bottom: 14px; }
+.footer-links-col ul { list-style: none; }
+.footer-links-col li { margin-bottom: 8px; }
+.footer-links-col a { color: rgba(250,247,242,0.5); text-decoration: none; font-size: 0.78rem; transition: color 0.2s; }
+.footer-links-col a:hover { color: var(--red); }
+.footer-bottom {
+  border-top: 1px solid rgba(250,247,242,0.08); padding-top: 20px;
+  display: flex; justify-content: space-between; align-items: center;
+  font-size: 0.75rem; flex-wrap: wrap; gap: 10px;
+}
+.footer-bottom a { color: var(--red); text-decoration: none; }
+
+/* ANIMATIONS */
+@keyframes fadeUp { from { opacity:0; transform:translateY(24px); } to { opacity:1; transform:translateY(0); } }
+@keyframes fadeLeft { from { opacity:0; transform:translateX(30px); } to { opacity:1; transform:translateX(0); } }
+@keyframes float { 0%,100% { transform:translateY(0); } 50% { transform:translateY(-8px); } }
+
+/* RESPONSIVE */
+@media (max-width: 768px) {
+  .hero { grid-template-columns: 1fr; min-height: auto; padding: 40px 5%; gap: 40px; }
+  .hero-right { order: -1; }
+  .featured-poster { height: 260px; }
+  .nav-links { display: none; }
+  .hero-stats { gap: 20px; }
+  .info-banner { flex-direction: column; padding: 32px 24px; }
+  .footer-top { flex-direction: column; gap: 24px; }
+  .player-info { flex-direction: column; }
+  .player-link-area { flex-direction: column; }
+}
+</style>
+</head>
+<body>
+
+<!-- NAVBAR -->
+<nav id="nav">
+  <div class="logo">
+    <div class="logo-icon">🎬</div>
+    <div class="logo-text">Shea <span>Cinema</span></div>
+  </div>
+  <ul class="nav-links">
+    <li><a href="#" class="active">سەرەکی</a></li>
+    <li><a href="#">فیلم</a></li>
+    <li><a href="#">زنجیرە</a></li>
+    <li><a href="#">دۆکۆمێنتاری</a></li>
+    <li><a href="#">نوێترین</a></li>
+  </ul>
+  <div class="nav-right">
+    <div class="search-wrap">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14" style="color:var(--text3)">
+        <circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/>
+      </svg>
+      <input type="text" placeholder="گەڕانی فیلم..." oninput="searchFilms(this.value)">
+    </div>
+  </div>
+</nav>
+
+<!-- HERO -->
+<section class="hero">
+  <div class="hero-left">
+    <div class="hero-eyebrow">✦ بەخێرهاتن بۆ Shea Cinema</div>
+    <h1 class="hero-title">SHEA Film ،<br><span class="accent">بۆ بینینی هەموو فیلمێك</span></h1>
+    <p class="hero-subtitle">Shea Cinema شوێنی فیلم و زنجیرەی کوردییە — گەنجینەی سینەمای کوردی زەنگینتر بکات.</p>
+    <div class="hero-stats">
+      <div class="stat"><div class="stat-num">٠<span>+</span></div><div class="stat-label">فیلم و زنجیرە</div></div>
+      <div class="stat"><div class="stat-num">٠<span>k</span></div><div class="stat-label">بینەر</div></div>
+      <div class="stat"><div class="stat-num">٠<span>+</span></div><div class="stat-label">جۆری فیلم</div></div>
+    </div>
+    <div class="hero-btns">
+      <button class="btn-primary" onclick="scrollToFilms()">
+        <svg viewBox="0 0 24 24" fill="currentColor" width="16" height="16"><path d="M5 3l14 9-14 9V3z"/></svg>
+        فیلمەکانمان ببینە
+      </button>
+      <button class="btn-secondary">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+        گەڕان بکە
+      </button>
+    </div>
+  </div>
+  <div class="hero-right">
+    <div class="float-card">
+      <div class="fc-icon">🏆</div>
+      <div class="fc-label">باشترین هەفتانە</div>
+      <div class="fc-val">دیمەنی کۆتایی</div>
+    </div>
+    <div class="featured-card">
+      <div class="featured-poster">
+        🎥
+        <div class="featured-poster-label">
+          <h3>فیلمی هەڵبژاردراو</h3>
+          <p>دراما · 2024 · 2 سا 10 خولەک</p>
+        </div>
+      </div>
+      <div class="featured-info">
+        <div class="featured-meta">
+          <span class="badge">دراما</span>
+          <span class="badge red">HD</span>
+          <span class="rating-big"><span>★</span> 9.1</span>
+        </div>
+        <button class="play-btn" onclick="openPlayer(filmsData[0])">
+          <svg viewBox="0 0 24 24" fill="white" width="18" height="18"><path d="M5 3l14 9-14 9V3z"/></svg>
+        </button>
+      </div>
+    </div>
+    <div class="float-card" style="top:60px;left:-30px;bottom:auto;right:auto;">
+      <div class="fc-icon">👁</div>
+      <div class="fc-label">ئەمڕۆ بینراون</div>
+      <div class="fc-val" style="color:var(--red)">2,400 بینەر</div>
+    </div>
+  </div>
+</section>
+
+<!-- GENRE -->
+<div class="genre-section">
+  <div class="genre-bar">
+    <button class="pill active" onclick="filterGenre(this,'هەموو')">هەموو</button>
+    <button class="pill" onclick="filterGenre(this,'ئەکشن')">ئەکشن</button>
+    <button class="pill" onclick="filterGenre(this,'دراما')">دراما</button>
+    <button class="pill" onclick="filterGenre(this,'کۆمیدیا')">کۆمیدیا</button>
+    <button class="pill" onclick="filterGenre(this,'رۆمانس')">رۆمانس</button>
+    <button class="pill" onclick="filterGenre(this,'تریلەر')">تریلەر</button>
+    <button class="pill" onclick="filterGenre(this,'مێژوویی')">مێژوویی</button>
+    <button class="pill" onclick="filterGenre(this,'داستانی')">داستانی</button>
+    <button class="pill" onclick="filterGenre(this,'ئەنیمیشن')">ئەنیمیشن</button>
+  </div>
+</div>
+
+<section class="section" id="films-section">
+  <div class="section-head">
+    <h2>نوێترین <em>فیلمەکان</em></h2>
+    <a class="see-all">هەموو ببینە →</a>
+  </div>
+  <div class="cards-scroll" id="new-row"></div>
+</section>
+
+<section class="section">
+  <div class="section-head">
+    <h2><em>باشترین</em> نمرەدراوەکان</h2>
+    <a class="see-all">هەموو ببینە →</a>
+  </div>
+  <div class="cards-scroll" id="top-row"></div>
+</section>
+
+<div class="info-banner">
+  <div class="ib-text">
+    <h2>SHEA CINEMA</h2>
+    <p>جوانترین و باشترین سایتی فیلمی کوردی — هەموو فیلم و زنجیرەکان لێرەن</p>
+  </div>
+</div>
+
+<section class="section">
+  <div class="section-head">
+    <h2><em>زنجیرە</em>ی تازە</h2>
+    <a class="see-all">هەموو ببینە →</a>
+  </div>
+  <div class="cards-scroll" id="series-row"></div>
+</section>
+
+<section class="section">
+  <div class="section-head">
+    <h2><em>دۆکۆمێنتاری</em></h2>
+    <a class="see-all">هەموو ببینە →</a>
+  </div>
+  <div class="cards-scroll" id="doc-row"></div>
+</section>
+
+<footer>
+  <div class="footer-top">
+    <div class="footer-logo-wrap">
+      <div class="logo" style="margin-bottom:12px">
+        <div class="logo-icon">🎬</div>
+        <div class="logo-text">Shea <span>Cinema</span></div>
+      </div>
+      <p class="footer-desc">گەنجینەی سینەمای کوردی. باشترین شوێن بۆ بینینی فیلم و زنجیرەی کوردی.</p>
+    </div>
+    <div class="footer-links-col">
+      <h4>بەستەرەکان</h4>
+      <ul><li><a href="#">سەرەکی</a></li><li><a href="#">فیلمەکان</a></li><li><a href="#">زنجیرەکان</a></li><li><a href="#">نوێترین</a></li></ul>
+    </div>
+    <div class="footer-links-col">
+      <h4>تایبەتمەندی</h4>
+      <ul><li><a href="#">جۆرەکان</a></li><li><a href="#">باشترینەکان</a></li><li><a href="#">دۆکۆمێنتاری</a></li><li><a href="#">ئەنیمیشن</a></li></ul>
+    </div>
+    <div class="footer-links-col">
+      <h4>پەیوەندی</h4>
+      <ul><li><a href="#">سەبارەت بەمان</a></li><li><a href="#">پەیوەندیمان پێوەبکە</a></li><li><a href="#">یاساکان</a></li></ul>
+    </div>
+  </div>
+  <div class="footer-bottom">
+    <span>© 2026 <a href="#">Shea Cinema</a> · هەموو مافەکان پارێزراون</span>
+    <span>گەورەترین سایت بۆ بینینی فلم و زنجیرەی ژێرنوسکرا و دۆبلاژکراو ❤️</span>
+  </div>
+</footer>
+
+<!-- ===== VIDEO PLAYER MODAL ===== -->
+<div class="player-overlay" id="playerOverlay" onclick="closeOnBg(event)">
+  <div class="player-modal" id="playerModal">
+
+    <!-- Video Screen -->
+    <div class="player-screen" id="playerScreen">
+      <div class="player-placeholder" id="playerPlaceholder">
+        <div class="big-icon">🎬</div>
+        <p>بەستەری YouTube یان ڤیدیۆی فیلمەکە زیاد بکە</p>
+        <button class="add-link-btn" onclick="document.getElementById('linkInput').focus()">بەستەر زیاد بکە</button>
+      </div>
+    </div>
+
+    <!-- Info Bar -->
+    <div class="player-info">
+      <div class="player-info-left">
+        <div class="player-film-title" id="playerTitle">—</div>
+        <div class="player-film-meta">
+          <span class="player-badge" id="playerGenre"></span>
+          <span class="player-rating" id="playerRating"></span>
+          <span class="player-year" id="playerYear"></span>
+        </div>
+        <div class="player-desc" id="playerDesc"></div>
+      </div>
+      <button class="player-close" onclick="closePlayer()">✕</button>
+    </div>
+
+  </div>
+</div>
+
+<!-- ===== ADMIN LOGIN MODAL ===== -->
+<div class="admin-overlay" id="adminOverlay" onclick="closeAdminOnBg(event)">
+  <div class="admin-modal" id="adminModal">
+    <div class="admin-header">
+      <span>🔐 پانێلی بەڕێوەبەر</span>
+      <button class="player-close" onclick="closeAdmin()">✕</button>
+    </div>
+    <div id="adminLoginBox">
+      <p class="admin-label">وشەی نهێنی بنووسە</p>
+      <div class="admin-input-row">
+        <input type="password" id="adminPass" placeholder="••••••••" onkeydown="if(event.key==='Enter')adminLogin()">
+        <button class="player-link-btn" onclick="adminLogin()">چوونەژوورەوە</button>
+      </div>
+      <p class="admin-err" id="adminErr"></p>
+    </div>
+    <div id="adminPanel" style="display:none">
+      <p class="admin-label" style="margin-bottom:12px">فیلمێک هەڵبژێرە و بەستەرەکەی دانێ</p>
+      <div class="admin-film-list" id="adminFilmList"></div>
+      <div class="admin-edit-box" id="adminEditBox" style="display:none">
+        <p class="admin-edit-title" id="adminEditTitle"></p>
+        <div class="admin-input-row">
+          <input type="text" id="adminLinkInput" placeholder="https://youtube.com/watch?v=..." style="direction:ltr">
+          <button class="player-link-btn" onclick="saveAdminLink()">✓ پاشەکەوت بکە</button>
+        </div>
+        <p class="admin-saved" id="adminSaved" style="display:none">✓ پاشەکەوت کرا!</p>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Hidden admin trigger - bottom left corner -->
+<button class="admin-trigger" title="🔐" onclick="openAdmin()">⚙</button>
+
+<script>
+// ===== وشەی نهێنی بەڕێوەبەر — ئەمە بگۆڕە =====
+const ADMIN_PASSWORD = "ish2612";
+
+// ===== DATA =====
+// بۆ زیادکردنی فیلم: link بەستەری YouTube یان فایلی ڤیدیۆ زیاد بکە
+const filmsData = [
+  {title:"1988",             year:"2024", rating:"8.9", genre:"دراما",    desc:"باسی ژیانی ساڵی ١٩٨٨ دەاکا کە چۆن ژیاون.",      bg:"linear-gradient(135deg,#3d2c1e,#8b6340)", link:""},
+  {title:"شەوی کۆتایی",      year:"2023", rating:"8.4", genre:"ئەکشن",    desc:"ئەکشنی تۆقین لە ناو شاری مێژووی.",              bg:"linear-gradient(135deg,#1e2d3d,#406380)", link:""},
+  {title:"گۆڤاری ئەحمەد",    year:"2024", rating:"7.8", genre:"کۆمیدیا",  desc:"کۆمیدیای رۆژانەی ژیانی گوندنشین.",              bg:"linear-gradient(135deg,#2d3d1e,#638040)", link:""},
+  {title:"دیداری دواجار",    year:"2023", rating:"9.1", genre:"رۆمانس",   desc:"چیرۆکی خۆشەویستی نێوان دوو کورد.",              bg:"linear-gradient(135deg,#3d1e2d,#804063)", link:""},
+  {title:"ئازادی",           year:"2024", rating:"8.6", genre:"مێژوویی",  desc:"فیلمی مێژووی لەسەر بەرخودانی کوردەکان.",       bg:"linear-gradient(135deg,#3d3d1e,#807a40)", link:""},
+  {title:"خاوەندیگەر",       year:"2022", rating:"7.5", genre:"تریلەر",   desc:"تریلەری تۆقین و هەیجانی بەرز.",                 bg:"linear-gradient(135deg,#1e1e3d,#404080)", link:""},
+  {title:"رووی خاک",         year:"2024", rating:"8.2", genre:"دراما",    desc:"دراما لەسەر ژیانی گوندی کوردستان.",             bg:"linear-gradient(135deg,#3d2010,#805030)", link:""},
+  {title:"هاوسەرگیری",       year:"2023", rating:"7.9", genre:"رۆمانس",   desc:"کۆمیدیای رۆمانتیک بۆ تەماشاکردن.",             bg:"linear-gradient(135deg,#203d30,#408060)", link:""},
+];
+const seriesData = [
+  {title:"ژیانی ئاسایی", year:"12 ئەپیزۆد", rating:"9.0", genre:"دراما",   desc:"زنجیرەی دراما لەسەر ژیانی خێزانی کوردی.",  bg:"linear-gradient(135deg,#2d1e3d,#634080)", link:""},
+  {title:"مالی پڕخەون", year:"8 ئەپیزۆد",  rating:"8.3", genre:"کۆمیدیا", desc:"کۆمیدیای مالەوانی و هاوشێوەی.",            bg:"linear-gradient(135deg,#3d1e1e,#804040)", link:""},
+  {title:"کیمیاگەر",    year:"16 ئەپیزۆد", rating:"8.7", genre:"تریلەر",  desc:"تریلەری هەیجانی بەرز بە ١٦ ئەپیزۆد.",      bg:"linear-gradient(135deg,#1e3d2d,#408063)", link:""},
+  {title:"شار",         year:"10 ئەپیزۆد", rating:"9.2", genre:"دراما",   desc:"دراما لەسەر ژیانی شارستانی نوێ.",          bg:"linear-gradient(135deg,#2d2d3d,#606080)", link:""},
+  {title:"دووەم",       year:"6 ئەپیزۆد",  rating:"7.6", genre:"ئەکشن",   desc:"ئەکشنی تۆقین لە ٦ ئەپیزۆد.",              bg:"linear-gradient(135deg,#3d2d1e,#806340)", link:""},
+  {title:"بەرز",        year:"14 ئەپیزۆد", rating:"8.1", genre:"مێژوویی", desc:"زنجیرەی مێژووی لەسەر مێژووی کوردستان.",   bg:"linear-gradient(135deg,#1e3d1e,#408040)", link:""},
+];
+const docsData = [
+  {title:"کوردستان",  year:"2023", rating:"9.3", genre:"دیکۆمێنتاری", desc:"دیکۆمێنتاری لەسەر سروشتی کوردستان.", bg:"linear-gradient(135deg,#1e2d3d,#3d6080)", link:""},
+  {title:"کەرزان",    year:"2024", rating:"8.8", genre:"دیکۆمێنتاری", desc:"دیمەنی کەرزانی کوردستان.",             bg:"linear-gradient(135deg,#2d3d1e,#608040)", link:""},
+  {title:"گوندەکەم",  year:"2022", rating:"8.5", genre:"دیکۆمێنتاری", desc:"دیکۆمێنتاری لەسەر ژیانی گوند.",      bg:"linear-gradient(135deg,#3d2d1e,#806040)", link:""},
+  {title:"خاک و خوێن",year:"2023", rating:"9.0", genre:"دیکۆمێنتاری", desc:"تاریخی خاکی کوردستان.",               bg:"linear-gradient(135deg,#3d1e1e,#804040)", link:""},
+];
+
+const emojis = ["🎬","🎥","📽","🎦","🎭","🎞","🌄","🏔"];
+let currentFilm = null;
+
+function createCard(f, idx) {
+  const d = document.createElement('div');
+  d.className = 'card';
+  d.innerHTML = `
+    <div class="card-img" style="background:${f.bg}">
+      <span style="font-size:2.5rem;position:relative;z-index:1">${emojis[idx % emojis.length]}</span>
+      <div class="card-rating-badge"><span class="star">★</span> ${f.rating}</div>
+      <div class="card-overlay">
+        <button class="card-overlay-btn" title="تەماشا بکە">
+          <svg viewBox="0 0 24 24" fill="white" width="15" height="15"><path d="M5 3l14 9-14 9V3z"/></svg>
+        </button>
+        <div class="card-overlay-rating">★ ${f.rating}</div>
+        <div class="card-overlay-genre">${f.genre}</div>
+      </div>
+    </div>
+    <div class="card-body">
+      <div class="card-title">${f.title}</div>
+      <div class="card-sub">${f.year}</div>
+    </div>
+  `;
+  d.querySelector('.card-overlay-btn').addEventListener('click', (e) => {
+    e.stopPropagation();
+    openPlayer(f);
+  });
+  d.addEventListener('click', () => openPlayer(f));
+  return d;
+}
+
+function populateRow(id, data) {
+  const row = document.getElementById(id);
+  if (!row) return;
+  row.innerHTML = '';
+  data.forEach((f, i) => row.appendChild(createCard(f, i)));
+}
+
+document.addEventListener('DOMContentLoaded', () => {
+  populateRow('new-row', filmsData);
+  populateRow('top-row', [...filmsData].sort((a,b) => parseFloat(b.rating)-parseFloat(a.rating)));
+  populateRow('series-row', seriesData);
+  populateRow('doc-row', docsData);
+});
+
+window.addEventListener('scroll', () => {
+  document.getElementById('nav').classList.toggle('scrolled', scrollY > 50);
+});
+
+function filterGenre(el, genre) {
+  document.querySelectorAll('.pill').forEach(p => p.classList.remove('active'));
+  el.classList.add('active');
+  const filtered = genre === 'هەموو' ? filmsData : filmsData.filter(f => f.genre === genre);
+  populateRow('new-row', filtered.length ? filtered : filmsData);
+}
+
+function searchFilms(q) {
+  if (!q.trim()) { populateRow('new-row', filmsData); return; }
+  const res = [...filmsData, ...seriesData].filter(f => f.title.includes(q) || f.genre.includes(q));
+  populateRow('new-row', res.length ? res : filmsData);
+}
+
+function scrollToFilms() {
+  document.getElementById('films-section').scrollIntoView({behavior:'smooth'});
+}
+
+// ===== PLAYER =====
+function openPlayer(film) {
+  currentFilm = film;
+  document.getElementById('playerTitle').textContent  = film.title;
+  document.getElementById('playerGenre').textContent  = film.genre;
+  document.getElementById('playerRating').textContent = '★ ' + film.rating;
+  document.getElementById('playerYear').textContent   = film.year;
+  document.getElementById('playerDesc').textContent   = film.desc || '';
+
+  if (film.link) {
+    renderVideo(film.link);
+  } else {
+    showPlaceholder();
+  }
+  document.getElementById('playerOverlay').classList.add('open');
+  document.body.style.overflow = 'hidden';
+}
+
+function closePlayer() {
+  document.getElementById('playerOverlay').classList.remove('open');
+  document.body.style.overflow = '';
+  const screen = document.getElementById('playerScreen');
+  const iframe = screen.querySelector('iframe');
+  const video  = screen.querySelector('video');
+  if (iframe) iframe.src = '';
+  if (video)  video.pause();
+}
+
+function closeOnBg(e) {
+  if (e.target === document.getElementById('playerOverlay')) closePlayer();
+}
+document.addEventListener('keydown', e => { if (e.key === 'Escape') { closePlayer(); closeAdmin(); } });
+
+function showPlaceholder() {
+  const screen = document.getElementById('playerScreen');
+  screen.innerHTML = `
+    <div class="player-placeholder">
+      <div class="big-icon">🎬</div>
+      <p style="color:var(--text3);font-size:0.85rem;text-align:center">${currentFilm ? currentFilm.title : ''}<br>بەم فیلمە بەستەرێک نەدراوەتەوە هێشتا</p>
+    </div>`;
+}
+
+function getYouTubeId(url) {
+  const reg = /(?:youtube\.com\/(?:watch\?v=|embed\/|shorts\/)|youtu\.be\/)([a-zA-Z0-9_-]{11})/;
+  const m = url.match(reg);
+  return m ? m[1] : null;
+}
+
+function renderVideo(url) {
+  const screen = document.getElementById('playerScreen');
+  const ytId = getYouTubeId(url);
+  if (ytId) {
+    screen.innerHTML = `<iframe src="https://www.youtube.com/embed/${ytId}?autoplay=1&rel=0" allow="autoplay; fullscreen" allowfullscreen></iframe>`;
+  } else if (url.match(/\.(mp4|webm|ogg)(\?|$)/i)) {
+    screen.innerHTML = `<video src="${url}" controls autoplay style="width:100%;height:100%;background:#000"></video>`;
+  } else if (url.startsWith('http')) {
+    screen.innerHTML = `<iframe src="${url}" allow="autoplay; fullscreen" allowfullscreen></iframe>`;
+  } else {
+    showPlaceholder();
+  }
+}
+
+// ===== ADMIN =====
+let adminLoggedIn = false;
+let selectedFilmRef = null;
+
+function openAdmin() {
+  document.getElementById('adminOverlay').classList.add('open');
+  document.body.style.overflow = 'hidden';
+  if (!adminLoggedIn) {
+    document.getElementById('adminLoginBox').style.display = 'block';
+    document.getElementById('adminPanel').style.display    = 'none';
+    setTimeout(() => document.getElementById('adminPass').focus(), 300);
+  }
+}
+
+function closeAdmin() {
+  document.getElementById('adminOverlay').classList.remove('open');
+  document.body.style.overflow = '';
+}
+
+function closeAdminOnBg(e) {
+  if (e.target === document.getElementById('adminOverlay')) closeAdmin();
+}
+
+function adminLogin() {
+  const val = document.getElementById('adminPass').value;
+  if (val === ADMIN_PASSWORD) {
+    adminLoggedIn = true;
+    document.getElementById('adminLoginBox').style.display = 'none';
+    document.getElementById('adminPanel').style.display    = 'block';
+    buildAdminList();
+  } else {
+    document.getElementById('adminErr').textContent = '✕ وشەی نهێنی هەڵەیە';
+    document.getElementById('adminPass').value = '';
+    document.getElementById('adminPass').focus();
+  }
+}
+
+function buildAdminList() {
+  const container = document.getElementById('adminFilmList');
+  container.innerHTML = '';
+
+  const allData = [
+    {label:'فیلمەکان', arr: filmsData},
+    {label:'زنجیرەکان', arr: seriesData},
+    {label:'دۆکۆمێنتاری', arr: docsData},
+  ];
+
+  allData.forEach(section => {
+    const sec = document.createElement('div');
+    sec.className = 'admin-section-title';
+    sec.textContent = section.label;
+    container.appendChild(sec);
+
+    section.arr.forEach(film => {
+      const item = document.createElement('div');
+      item.className = 'admin-film-item';
+      item.innerHTML = `
+        <div>
+          <div class="afilm-name">${film.title}</div>
+          <div class="afilm-meta">${film.genre} · ${film.year}</div>
+        </div>
+        <span class="afilm-status ${film.link ? 'has-link' : 'no-link'}">${film.link ? '✓ بەستەر هەیە' : '✕ نییە'}</span>
+      `;
+      item.addEventListener('click', () => selectFilm(film, item));
+      container.appendChild(item);
+    });
+  });
+}
+
+function selectFilm(film, el) {
+  document.querySelectorAll('.admin-film-item').forEach(i => i.classList.remove('selected'));
+  el.classList.add('selected');
+  selectedFilmRef = film;
+
+  const box = document.getElementById('adminEditBox');
+  box.style.display = 'block';
+  document.getElementById('adminEditTitle').textContent = '🎬 ' + film.title;
+  document.getElementById('adminLinkInput').value = film.link || '';
+  document.getElementById('adminSaved').style.display = 'none';
+}
+
+function saveAdminLink() {
+  if (!selectedFilmRef) return;
+  const url = document.getElementById('adminLinkInput').value.trim();
+  selectedFilmRef.link = url;
+  buildAdminList();
+
+  // re-select same film
+  const allItems = document.querySelectorAll('.admin-film-item');
+  allItems.forEach(item => {
+    if (item.querySelector('.afilm-name')?.textContent === selectedFilmRef.title) {
+      item.classList.add('selected');
+    }
+  });
+
+  const saved = document.getElementById('adminSaved');
+  saved.style.display = 'block';
+  setTimeout(() => saved.style.display = 'none', 2000);
+}
+</script>
+</body>
+</html>
