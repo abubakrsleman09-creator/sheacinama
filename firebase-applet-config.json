@@ -1,4 +1,4 @@
-const firebaseConfig = {
+{
   apiKey: "AIzaSyDytQpNhJ_URMg7wIWIWjeLllcbPpKBFr0",
   authDomain: "sheacinema-39347.firebaseapp.com",
   projectId: "sheacinema-39347",
