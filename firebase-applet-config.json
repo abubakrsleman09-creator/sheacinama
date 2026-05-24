@@ -1,9 +1,9 @@
-{
-    apiKey: "AIzaSyA7AF37Q1v9P-exIm__20m9pmzj1bm65hw",
-    authDomain: "sheacinema-0.firebaseapp.com",
-    projectId: "sheacinema-0",
-    storageBucket: "sheacinema-0.firebasestorage.app",
-    messagingSenderId: "937682794608",
-    appId: "1:937682794608:web:e092163e101ea248b39cb5",
-    measurementId: "G-FDFKVNXTY0"
-  }
+const firebaseConfig = {
+  apiKey: "AIzaSyDytQpNhJ_URMg7wIWIWjeLllcbPpKBFr0",
+  authDomain: "sheacinema-39347.firebaseapp.com",
+  projectId: "sheacinema-39347",
+  storageBucket: "sheacinema-39347.firebasestorage.app",
+  messagingSenderId: "504581671342",
+  appId: "1:504581671342:web:6a8c5b3404d011f156a03f",
+  measurementId: "G-WN1GC9X30C"
+}
