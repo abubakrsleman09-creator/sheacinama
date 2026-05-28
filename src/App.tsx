@@ -29,6 +29,7 @@ import {
   handleFirestoreError 
 } from "./lib/firebase";
 import ReactPlayer from "react-player";
+import sheaLogo from "./assets/images/shea_logo_1779952619775.png";
 import { Home, Play, Search, User as UserIcon, LogOut, Star, TrendingUp, Menu, X, ChevronLeft, ChevronRight, Apple, Settings, Plus, Trash2, Edit2, Save, Heart, Bell, Clock, History, ShieldCheck, Users, HelpCircle, MessageSquare, Upload, Database, RefreshCw, Eye, Globe, Smartphone, Laptop } from "lucide-react";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
@@ -154,7 +155,15 @@ function App() {
     const local = localStorage.getItem("local_movies_fallback");
     if (local) {
       try {
-        return JSON.parse(local);
+        const parsed = JSON.parse(local);
+        if (Array.isArray(parsed)) {
+          const filtered = parsed.filter((m: any) => m.id !== "dark_knight" && m.id !== "interstellar" && m.id !== "bitter_honey");
+          if (filtered.length !== parsed.length) {
+            localStorage.setItem("local_movies_fallback", JSON.stringify(filtered));
+          }
+          return filtered;
+        }
+        return [];
       } catch (e) {
         return [];
       }
@@ -413,12 +422,16 @@ function App() {
     return (
       <div className="flex items-center justify-center min-h-screen bg-[#0a0a0a] text-white">
         <motion.div 
-          animate={{ scale: [1, 1.1, 1] }}
-          transition={{ repeat: Infinity, duration: 1.5 }}
-          className="text-primary text-4xl font-bold flex flex-col items-center gap-4"
+          initial={{ opacity: 0, scale: 0.95 }}
+          animate={{ opacity: 1, scale: 1 }}
+          transition={{ duration: 0.5 }}
+          className="flex flex-col items-center gap-6"
         >
-          <div className="w-16 h-16 border-4 border-primary border-t-transparent rounded-full animate-spin"></div>
-          <span className="font-sans tracking-widest text-gold-500">SHEA CINEMA</span>
+          <div className="relative flex items-center justify-center">
+            <div className="w-24 h-24 border-4 border-primary/20 border-t-primary rounded-full animate-spin absolute" />
+            <img src={sheaLogo} alt="Loading..." className="w-16 h-16 object-cover rounded-2xl animate-pulse" referrerPolicy="no-referrer" />
+          </div>
+          <span className="font-sans font-black tracking-widest text-primary text-xl">SHEA CINEMA</span>
         </motion.div>
       </div>
     );
@@ -736,12 +749,12 @@ function Navbar({ user, isAdmin, onLogin, onLogout, notifications, onOpenRequest
     <nav className={`fixed top-0 left-0 right-0 z-50 transition-all duration-300 ${isScrolled ? "bg-[#0a0a0a]/95 backdrop-blur-md py-3 shadow-2xl" : "bg-transparent py-5"}`}>
       <div className="max-w-7xl mx-auto px-4 md:px-8 flex items-center justify-between">
         <div className="flex items-center gap-8">
-          <Link to="/" className="flex items-center gap-2 group">
-             {/* Styled SVG Logo for Shea Cinema */}
-            <div className="bg-primary p-2 rounded-lg group-hover:rotate-12 transition-transform duration-300">
-              <Play className="fill-black w-6 h-6 text-black" />
+          <Link to="/" className="flex items-center gap-2.5 group">
+             {/* Styled Image Logo for Shea Cinema */}
+            <div className="w-10 h-10 rounded-xl overflow-hidden border border-white/10 group-hover:rotate-12 group-hover:scale-105 transition-all duration-300 shadow-lg bg-black">
+              <img src={sheaLogo} alt="Shea Cinema Logo" className="w-full h-full object-cover" referrerPolicy="no-referrer" />
             </div>
-            <span className="text-2xl font-bold tracking-tighter text-white"><span className="text-primary text-gold-500">SHEA</span> CINEMA</span>
+            <span className="text-2xl font-black tracking-tighter text-white font-sans"><span className="text-primary">SHEA</span> CINEMA</span>
           </Link>
 
           <div className="hidden md:flex items-center gap-6 text-sm font-medium text-white/70">
@@ -828,8 +841,11 @@ function Navbar({ user, isAdmin, onLogin, onLogout, notifications, onOpenRequest
             className="fixed inset-0 z-[60] bg-[#0a0a0a] flex flex-col p-8"
           >
             <div className="flex justify-between items-center mb-12">
-              <span className="text-2xl font-bold tracking-tighter text-white"><span className="text-primary text-gold-500">SHEA</span> CINEMA</span>
-              <button onClick={() => setMobileMenuOpen(false)}><X className="w-8 h-8" /></button>
+              <div className="flex items-center gap-2.5">
+                <img src={sheaLogo} alt="Logo" className="w-9 h-9 rounded-xl border border-white/10" referrerPolicy="no-referrer" />
+                <span className="text-2xl font-black tracking-tighter text-white font-sans"><span className="text-primary">SHEA</span> CINEMA</span>
+              </div>
+              <button onClick={() => setMobileMenuOpen(false)}><X className="w-8 h-8 text-white/80 hover:text-white" /></button>
             </div>
             <div className="flex flex-col gap-6 text-xl">
               <Link to="/" onClick={() => setMobileMenuOpen(false)}>سەرەتا</Link>
@@ -1135,14 +1151,14 @@ function MovieSlider({ title, movies, favorites, toggleFavorite }: { title: stri
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
-        <h2 className="text-2xl font-bold flex items-center gap-2">
+        <h2 className="text-xl md:text-2xl font-bold flex items-center gap-2">
           {title}
           <div className="w-1.5 h-1.5 bg-primary rounded-full mt-1" />
         </h2>
-        <Button variant="link" className="text-white/40 hover:text-primary p-0">بینینی هەمووی <ChevronRight className="mr-1 w-4 h-4" /></Button>
+        <Button variant="link" className="text-white/40 hover:text-primary text-xs md:text-sm p-0">بینینی هەمووی <ChevronRight className="mr-1 w-4 h-4" /></Button>
       </div>
       
-      <div className="flex gap-4 overflow-x-auto pb-6 scrollbar-hide no-scrollbar">
+      <div className="flex gap-3 overflow-x-auto pb-4 scrollbar-hide no-scrollbar">
         {movies.map((movie) => (
           <MovieCard 
             key={movie.id} 
@@ -1150,6 +1166,7 @@ function MovieSlider({ title, movies, favorites, toggleFavorite }: { title: stri
             isFavorite={favorites.includes(movie.id)} 
             onToggleFavorite={() => toggleFavorite(movie.id)}
             progress={(movie as any).progress} 
+            className="w-[115px] sm:w-[130px] md:w-[150px] lg:w-[165px] shrink-0"
           />
         ))}
       </div>
@@ -1157,9 +1174,21 @@ function MovieSlider({ title, movies, favorites, toggleFavorite }: { title: stri
   );
 }
 
-function MovieCard({ movie, isFavorite, onToggleFavorite, progress }: { movie: Movie; isFavorite: boolean; onToggleFavorite: () => void; progress?: number; key?: string }) {
+function MovieCard({ 
+  movie, 
+  isFavorite, 
+  onToggleFavorite, 
+  progress,
+  className
+}: { 
+  movie: Movie; 
+  isFavorite: boolean; 
+  onToggleFavorite: () => void; 
+  progress?: number; 
+  className?: string;
+}) {
   return (
-    <div className="min-w-[180px] md:min-w-[220px] group relative">
+    <div className={cn("w-full group relative", className)}>
       <Link to={`/movie/${movie.id}`}>
         <div className="relative aspect-[2/3] rounded-2xl overflow-hidden mb-3 border border-white/5 transition-all duration-300 group-hover:scale-[1.02] group-hover:shadow-[0_0_30px_rgba(255,183,0,0.2)]">
           <img 
@@ -1811,8 +1840,8 @@ function MoviePage({ movies, user, favorites, toggleFavorite, setStatus, addToHi
 
           <div className="space-y-4 pt-8">
             <h3 className="text-xl font-bold">فیلمی پەیوەندیدار</h3>
-            <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
-              {movies.filter(m => m.id !== movie.id).slice(0, 3).map(m => (
+            <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 gap-3 sm:gap-4">
+              {movies.filter(m => m.id !== movie.id).slice(0, 5).map(m => (
                 <MovieCard key={m.id} movie={m} isFavorite={favorites.includes(m.id)} onToggleFavorite={() => toggleFavorite(m.id)} />
               ))}
             </div>
@@ -2109,7 +2138,7 @@ function SearchPage({ movies, favorites, toggleFavorite, onRequestMovie, initial
         </h2>
         
         {filtered.length > 0 ? (
-          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-y-12 gap-x-6">
+          <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 xl:grid-cols-7 gap-y-8 gap-x-3 sm:gap-x-4">
             {filtered.map(movie => (
               <MovieCard key={movie.id} movie={movie} isFavorite={favorites.includes(movie.id)} onToggleFavorite={() => toggleFavorite(movie.id)} />
             ))}
@@ -2367,9 +2396,7 @@ function AdminPage({ movies, setStatus, isOwner, showConfirm }: { movies: Movie[
         try {
           const isBypass = localStorage.getItem("admin_bypass_active") === "true";
           if (isBypass) {
-            const updated = movies.filter(m => m.id !== id);
-            setMovies(updated);
-            localStorage.setItem("local_movies_fallback", JSON.stringify(updated));
+            await deleteDoc(doc(db, "movies", id));
             setStatus({ type: "success", message: "فیلمەکە بە سەرکەوتوویی سڕایەوە (بایپاس)" });
             return;
           }
@@ -2399,9 +2426,12 @@ function AdminPage({ movies, setStatus, isOwner, showConfirm }: { movies: Movie[
         try {
           const isBypass = localStorage.getItem("admin_bypass_active") === "true";
           if (isBypass) {
-            const updated = movies.map(m => ({ ...m, isFeatured: true }));
-            setMovies(updated);
-            localStorage.setItem("local_movies_fallback", JSON.stringify(updated));
+            const batch = writeBatch(db);
+            movies.forEach((movie) => {
+              const movieRef = doc(db, "movies", movie.id);
+              batch.update(movieRef, { isFeatured: true });
+            });
+            await batch.commit();
             setStatus({ type: "success", message: "سەرجەم فیلمەکان بە سەرکەوتوویی نایاب کران (بایپاس)" });
             return;
           }
@@ -2432,22 +2462,20 @@ function AdminPage({ movies, setStatus, isOwner, showConfirm }: { movies: Movie[
 
       const isBypass = localStorage.getItem("admin_bypass_active") === "true";
       if (isBypass) {
-        let updatedMovies = [...movies];
         if (movie.id) {
-          updatedMovies = movies.map(m => m.id === movie.id ? { ...m, ...cleanData, updatedAt: new Date().toISOString() } : m);
+          await setDoc(doc(db, "movies", movie.id), {
+            ...cleanData,
+            updatedAt: new Date().toISOString()
+          });
           setStatus({ type: "success", message: "فیلمەکە بە سەرکەوتوویی نوێکرایەوە (بایپاس)" });
         } else {
-          const newId = "local_" + Date.now();
-          const newMovie = {
+          const docRef = await addDoc(collection(db, "movies"), {
             ...cleanData,
-            id: newId,
             createdAt: new Date().toISOString()
-          };
-          updatedMovies.unshift(newMovie);
+          });
+          finalMovieId = docRef.id;
           setStatus({ type: "success", message: "فیلمەکە بە سەرکەوتوویی بڵاوکرایەوە (بایپاس)" });
         }
-        setMovies(updatedMovies);
-        localStorage.setItem("local_movies_fallback", JSON.stringify(updatedMovies));
         setEditingMovie(null);
         setIsAdding(false);
         return;
@@ -4213,11 +4241,11 @@ function Footer({
     <footer className="bg-[#0a0a0a] border-t border-white/5 py-16">
       <div className="max-w-7xl mx-auto px-4 md:px-8 flex flex-col md:flex-row justify-between items-start gap-12">
         <div className="space-y-6 max-w-sm">
-          <div className="flex items-center gap-2">
-             <div className="bg-primary p-1.5 rounded-lg">
-                <Play className="fill-black w-5 h-5 text-black" />
+          <div className="flex items-center gap-2.5">
+             <div className="w-10 h-10 rounded-xl overflow-hidden border border-white/10 shadow-md bg-black">
+                <img src={sheaLogo} alt="Shea Cinema" className="w-full h-full object-cover" referrerPolicy="no-referrer" />
              </div>
-             <span className="text-2xl font-bold tracking-tighter text-white"><span className="text-primary text-gold-500">SHEA</span> CINEMA</span>
+             <span className="text-2xl font-black tracking-tighter text-white font-sans"><span className="text-primary">SHEA</span> CINEMA</span>
           </div>
           <p className="text-white/40 leading-relaxed text-sm">
             شیای سینەما، یەکەمین و گەورەترین پلاتفۆرمی کوردی بۆ بینینی فیلم و زنجیرە جیهانییەکان بە ژێرنووسی کوردی و کوالێتی بەرز.
