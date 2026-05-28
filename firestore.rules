@@ -22,7 +22,7 @@ service cloud.firestore {
     function isAdmin() {
       return isSignedIn() && (
         exists(/databases/$(database)/documents/admins/$(request.auth.uid)) ||
-        request.auth.token.email == "abubakrsleman4@gmail.com"
+        request.auth.token.email == "abubakrsleman09@gmail.com"
       );
     }
 
@@ -39,7 +39,7 @@ service cloud.firestore {
     // Admin Rules
     match /admins/{adminId} {
       allow read: if isSignedIn();
-      allow write: if isSignedIn() && request.auth.token.email == "abubakrsleman4@gmail.com";
+      allow write: if isSignedIn() && request.auth.token.email == "abubakrsleman09@gmail.com";
     }
 
     // Movie Rules
