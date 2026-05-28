@@ -12,83 +12,22 @@ export interface User {
   tenantId: string | null;
 }
 
-// Hardcoded default movies to seed if database is brand new
-const defaultSeedMovies: Record<string, any> = {
-  "movies/dark_knight": {
-    id: "dark_knight",
-    titleKu: "سوارچاکی تاریکی",
-    titleEn: "The Dark Knight",
-    category: "Action",
-    year: 2008,
-    duration: "2کژ 32خ",
-    rating: 9.0,
-    description: "کاتێک جۆکەر ئاژاوە لە گۆتهام دروست دەکات، باتمان تاقیکردنەوەیەکی قورسی مۆڕاڵی و جەستەیی دەکات بۆ پاراستنی شارەکەی.",
-    posterUrl: "https://images.unsplash.com/photo-1509198397868-475647b2a1e5?w=500&auto=format&fit=crop",
-    bannerUrl: "https://images.unsplash.com/photo-1478760329108-5c3ed9d495a0?w=1600&auto=format&fit=crop",
-    trailerUrl: "https://www.youtube.com/watch?v=EXeTwQWrcwY",
-    qualities: [
-      { label: "1080p FHD", url: "https://www.w3schools.com/html/mov_bbb.mp4" },
-      { label: "720p HD", url: "https://www.w3schools.com/html/mov_bbb.mp4" }
-    ],
-    cast: [
-      { name: "Christian Bale", role: "Bruce Wayne / Batman", imageUrl: "" },
-      { name: "Heath Ledger", role: "Joker", imageUrl: "" }
-    ],
-    createdAt: new Date().toISOString()
-  },
-  "movies/interstellar": {
-    id: "interstellar",
-    titleKu: "نێوان ئەستێرەکان",
-    titleEn: "Interstellar",
-    category: "Drama",
-    year: 2014,
-    duration: "2کژ 49خ",
-    rating: 8.7,
-    description: "گەشتێکی مێژوویی و زانستی سەرنجڕاکێش بەناو کونێکی کرمیدا بۆ گەڕان بەدوای نیشتمانێکی نوێ بۆ مرۆڤایەتی لەناو ئەستێرەکاندا.",
-    posterUrl: "https://images.unsplash.com/photo-1451187580459-43490279c0fa?w=500&auto=format&fit=crop",
-    bannerUrl: "https://images.unsplash.com/photo-1444703686981-a3abbc4d4fe3?w=1600&auto=format&fit=crop",
-    trailerUrl: "https://www.youtube.com/watch?v=zSWdZAZE3Tc",
-    qualities: [
-      { label: "1080p FHD", url: "https://www.w3schools.com/html/mov_bbb.mp4" },
-      { label: "720p HD", url: "https://www.w3schools.com/html/mov_bbb.mp4" }
-    ],
-    cast: [
-      { name: "Matthew McConaughey", role: "Cooper", imageUrl: "" },
-      { name: "Anne Hathaway", role: "Brand", imageUrl: "" }
-    ],
-    createdAt: new Date().toISOString()
-  },
-  "movies/bitter_honey": {
-    id: "bitter_honey",
-    titleKu: "هەنگوینی تاڵ",
-    titleEn: "Bitter Honey",
-    category: "Kurdish",
-    year: 2021,
-    duration: "1کژ 45خ",
-    rating: 8.5,
-    description: "درامایەکی کۆمەڵایەتی و پڕ لە ململانێ لە یەکێک لە گوندەکانی کوردستان کە باس لە خۆشەویستی و کێشە کۆمەڵایەتییەکان دەکات.",
-    posterUrl: "https://images.unsplash.com/photo-1518173946687-a4c8a383392e?w=500&auto=format&fit=crop",
-    bannerUrl: "https://images.unsplash.com/photo-1504280390367-361c6d9f38f4?w=1600&auto=format&fit=crop",
-    trailerUrl: "https://www.youtube.com/watch?v=EXeTwQWrcwY",
-    qualities: [
-      { label: "1080p FHD", url: "https://www.w3schools.com/html/mov_bbb.mp4" }
-    ],
-    cast: [
-      { name: "کوردستان ئەحمەد", role: "ئەکتەر", imageUrl: "" }
-    ],
-    createdAt: new Date().toISOString()
-  }
-};
+// Hardcoded default movies originally seeded to new databases
+const defaultSeedMovies: Record<string, any> = {};
 
 let store: Record<string, any> = {};
 try {
   const data = localStorage.getItem("sheacinema_local_db");
   if (data) {
     store = JSON.parse(data);
+    // Remove default mock seed movies if they exist
+    delete store["movies/dark_knight"];
+    delete store["movies/interstellar"];
+    delete store["movies/bitter_honey"];
+    localStorage.setItem("sheacinema_local_db", JSON.stringify(store));
   } else {
     // Brand new local DB initialization
     store = {
-      ...defaultSeedMovies,
       "admins/local-user-admin-123": {
         id: "local-user-admin-123",
         email: "abubakrsleman4@gmail.com",
