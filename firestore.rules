@@ -22,7 +22,7 @@ service cloud.firestore {
     function isAdmin() {
       return isSignedIn() && (
         exists(/databases/$(database)/documents/admins/$(request.auth.uid)) ||
-        request.auth.token.email == "abubakrsleman09@gmail.com"
+        (request.auth.token != null && request.auth.token.email != null && request.auth.token.email.lower() == 'abubakrsleman4@gmail.com')
       );
     }
 
@@ -39,7 +39,9 @@ service cloud.firestore {
     // Admin Rules
     match /admins/{adminId} {
       allow read: if isSignedIn();
-      allow write: if isSignedIn() && request.auth.token.email == "abubakrsleman09@gmail.com";
+      allow write: if isSignedIn() && (
+        request.auth.token != null && request.auth.token.email != null && request.auth.token.email.lower() == 'abubakrsleman4@gmail.com'
+      );
     }
 
     // Movie Rules
@@ -56,6 +58,20 @@ service cloud.firestore {
           && request.resource.data.rating is number && request.resource.data.rating >= 0 && request.resource.data.rating <= 10;
         allow delete: if isAdmin() || (isSignedIn() && resource.data.userId == request.auth.uid);
       }
+    }
+
+    // Requests Rules
+    match /requests/{requestId} {
+      allow read: if isAdmin();
+      allow update, delete: if isAdmin();
+      allow create: if request.resource.data.keys().hasAll(['userId', 'email', 'movieTitle', 'note', 'status', 'requestedAt'])
+        && request.resource.data.movieTitle is string && request.resource.data.movieTitle.size() <= 200
+        && request.resource.data.note is string && request.resource.data.note.size() <= 1000
+        && request.resource.data.status == 'pending'
+        && (
+          (request.resource.data.userId == 'guest' && request.resource.data.email == 'anonymous@sheacinema.com') ||
+          (isSignedIn() && request.resource.data.userId == request.auth.uid)
+        );
     }
   }
 }
