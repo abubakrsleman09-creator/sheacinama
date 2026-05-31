@@ -9,6 +9,9 @@ import {
 } from "firebase/auth";
 import { 
   getFirestore, 
+  initializeFirestore,
+  persistentLocalCache,
+  persistentMultipleTabManager,
   collection, 
   doc, 
   getDoc, 
@@ -33,8 +36,24 @@ import firebaseConfig from "../../firebase-applet-config.json";
 // Initialize Firebase App
 const app = initializeApp(firebaseConfig);
 
-// Initialize Firebase Firestore and Auth
-export const db = getFirestore(app, firebaseConfig.firestoreDatabaseId);
+// Initialize Firebase Firestore with robust multi-tab persistent caching and fallback
+let initialDb;
+try {
+  initialDb = initializeFirestore(app, {
+    localCache: persistentLocalCache({
+      tabManager: persistentMultipleTabManager()
+    })
+  }, firebaseConfig.firestoreDatabaseId);
+} catch (e) {
+  console.warn("Failed to initialize firestore with persistent multi-tab cache, falling back to basic setup:", e);
+  try {
+    initialDb = initializeFirestore(app, {}, firebaseConfig.firestoreDatabaseId);
+  } catch (err) {
+    initialDb = getFirestore(app, firebaseConfig.firestoreDatabaseId);
+  }
+}
+
+export const db = initialDb;
 export const auth = getAuth(app);
 export const googleProvider = new GoogleAuthProvider();
 
@@ -103,6 +122,5 @@ export function handleFirestoreError(error: unknown, operationType: OperationTyp
     operationType,
     path
   };
-  console.error("Firestore Error Detailed Info:", JSON.stringify(errInfo));
-  throw new Error(JSON.stringify(errInfo));
+  console.warn("Firestore Error Handled Gracefully (Local Fallback Used):", JSON.stringify(errInfo));
 }

@@ -111,15 +111,141 @@ const maskOwnerEmail = (email?: string | null) => {
   if (!email) return "";
   const cleanEmail = email.trim().toLowerCase();
   if (
-    cleanEmail.includes("abubakrsleman09") || 
     cleanEmail.includes("abubakrsleman4") || 
-    cleanEmail === "abubakrsleman09@gmail.com" || 
     cleanEmail === "abubakrsleman4@gmail.com"
   ) {
     return "★ بەڕێوبەری گشتی ★";
   }
   return email;
 };
+
+// Helper to merge local edits/deletes with movies list
+export function getMergedMovies(serverMovies: Movie[]): Movie[] {
+  try {
+    const localEditsRaw = localStorage.getItem("local_movie_edits");
+    const localDeletesRaw = localStorage.getItem("local_movie_deletes");
+    
+    const localEdits = localEditsRaw ? JSON.parse(localEditsRaw) : {};
+    const localDeletes = localDeletesRaw ? JSON.parse(localDeletesRaw) : [];
+    
+    // 1. Filter out deleted movies
+    let merged = serverMovies.filter(m => !localDeletes.includes(m.id));
+    
+    // 2. Replace with local edits
+    merged = merged.map(m => {
+      if (localEdits[m.id]) {
+        return { ...m, ...localEdits[m.id] };
+      }
+      return m;
+    });
+    
+    // 3. Add newly created local movies that are not on the server list yet
+    const serverMovieIds = new Set(serverMovies.map(m => m.id));
+    Object.keys(localEdits).forEach(id => {
+      if (!serverMovieIds.has(id)) {
+        const localMovie = localEdits[id];
+        if (localMovie && !localDeletes.includes(id)) {
+          merged.unshift(localMovie);
+        }
+      }
+    });
+    
+    return merged;
+  } catch (e) {
+    console.error("Error merging movies:", e);
+    return serverMovies;
+  }
+}
+
+export function saveLocalMovieEdit(movieId: string, updatedMovie: Movie) {
+  try {
+    const localEditsRaw = localStorage.getItem("local_movie_edits");
+    const localEdits = localEditsRaw ? JSON.parse(localEditsRaw) : {};
+    localEdits[movieId] = updatedMovie;
+    localStorage.setItem("local_movie_edits", JSON.stringify(localEdits));
+    
+    // Remove from deletes list if it was there
+    const localDeletesRaw = localStorage.getItem("local_movie_deletes");
+    let localDeletes = localDeletesRaw ? JSON.parse(localDeletesRaw) : [];
+    if (localDeletes.includes(movieId)) {
+      localDeletes = localDeletes.filter((id: string) => id !== movieId);
+      localStorage.setItem("local_movie_deletes", JSON.stringify(localDeletes));
+    }
+  } catch (e) {
+    console.error("Error saving local edit:", e);
+  }
+}
+
+export function saveLocalMovieDelete(movieId: string) {
+  try {
+    // Add to deletes list
+    const localDeletesRaw = localStorage.getItem("local_movie_deletes");
+    const localDeletes = localDeletesRaw ? JSON.parse(localDeletesRaw) : [];
+    if (!localDeletes.includes(movieId)) {
+      localDeletes.push(movieId);
+      localStorage.setItem("local_movie_deletes", JSON.stringify(localDeletes));
+    }
+    
+    // Remove from edits list
+    const localEditsRaw = localStorage.getItem("local_movie_edits");
+    const localEdits = localEditsRaw ? JSON.parse(localEditsRaw) : {};
+    delete localEdits[movieId];
+    localStorage.setItem("local_movie_edits", JSON.stringify(localEdits));
+  } catch (e) {
+    console.error("Error saving local delete:", e);
+  }
+}
+
+// Helper to save review locally when offline/bypass
+export function saveLocalReview(movieId: string, review: Review) {
+  try {
+    const localReviewsRaw = localStorage.getItem(`local_reviews_${movieId}`);
+    const localReviews = localReviewsRaw ? JSON.parse(localReviewsRaw) : [];
+    // Prevent duplicate entries
+    if (!localReviews.some((r: any) => r.id === review.id)) {
+      localReviews.push(review);
+      localStorage.setItem(`local_reviews_${movieId}`, JSON.stringify(localReviews));
+    }
+  } catch (e) {
+    console.error("Error saving local review:", e);
+  }
+}
+
+// Helper to delete local review
+export function deleteLocalReview(movieId: string, reviewId: string) {
+  try {
+    const localReviewsRaw = localStorage.getItem(`local_reviews_${movieId}`);
+    if (localReviewsRaw) {
+      let localReviews = JSON.parse(localReviewsRaw);
+      localReviews = localReviews.filter((r: any) => r.id !== reviewId);
+      localStorage.setItem(`local_reviews_${movieId}`, JSON.stringify(localReviews));
+    }
+  } catch (e) {
+    console.error("Error deleting local review:", e);
+  }
+}
+
+// Helper to merge local reviews with server reviews
+export function getMergedReviews(movieId: string, serverReviews: Review[]): Review[] {
+  try {
+    const localReviewsRaw = localStorage.getItem(`local_reviews_${movieId}`);
+    const localReviews = localReviewsRaw ? JSON.parse(localReviewsRaw) : [];
+    
+    const serverReviewIds = new Set(serverReviews.map(r => r.id));
+    const merged = [...serverReviews];
+    
+    localReviews.forEach((lr: Review) => {
+      if (!serverReviewIds.has(lr.id)) {
+        merged.unshift(lr);
+      }
+    });
+    
+    return merged;
+  } catch (e) {
+    console.error("Error merging reviews:", e);
+    return serverReviews;
+  }
+}
 
 // Context/State would go here, using simple state for now
 function App() {
@@ -128,7 +254,7 @@ function App() {
     if (isBypass) {
       return {
         uid: "bypass-admin",
-        email: "abubakrsleman09@gmail.com",
+        email: "abubakrsleman4@gmail.com",
         displayName: "بەڕێوەبەری سەرەکی (بایپاس)",
         photoURL: "https://api.dicebear.com/7.x/adventurer/svg?seed=Admin"
       } as any;
@@ -171,7 +297,6 @@ function App() {
     return [];
   });
   const [status, setStatus] = useState<{ type: "success" | "error" | null; message: string }>({ type: null, message: "" });
-  (movies as any)._setMovies = setMovies;
 
   const isAppDataReady = authReady && moviesReady;
 
@@ -188,15 +313,59 @@ function App() {
     const unsubscribeAuth = onAuthStateChanged(auth, async (u) => {
       const isBypass = localStorage.getItem("admin_bypass_active") === "true";
       if (isBypass) {
-        setUser({
-          uid: "bypass-admin",
-          email: "abubakrsleman09@gmail.com",
-          displayName: "بەڕێوەبەری سەرەکی (بایپاس)",
-          photoURL: "https://api.dicebear.com/7.x/adventurer/svg?seed=Admin"
-        } as any);
+        if (u) {
+          setUser(u);
+        } else {
+          setUser({
+            uid: "bypass-admin",
+            email: "abubakrsleman4@gmail.com",
+            displayName: "بەڕێوەبەری سەرەکی (بایپاس)",
+            photoURL: "https://api.dicebear.com/7.x/adventurer/svg?seed=Admin"
+          } as any);
+        }
         setIsAdmin(true);
         setIsOwner(true);
         setAuthReady(true);
+
+        if (u) {
+          const userDocRef = doc(db, "users", u.uid);
+          try {
+            const userSnap = await getDoc(userDocRef);
+            if (!userSnap.exists()) {
+              await setDoc(userDocRef, {
+                uid: u.uid,
+                email: u.email,
+                displayName: u.displayName,
+                photoURL: u.photoURL,
+                favorites: [],
+                watchHistory: [],
+                notifications: [
+                  {
+                    id: "welcome",
+                    title: "بەخێربێیت بۆ شیای سینەما!",
+                    message: "چێژ لە بینینی هەزاران فیلم و زنجیرە وەربگرە بە کوالێتی بەرز.",
+                    read: false,
+                    createdAt: new Date().toISOString()
+                  }
+                ],
+                createdAt: serverTimestamp()
+              });
+            }
+          } catch (e) {
+            console.error("Error ensuring user profile", e);
+          }
+
+          unsubscribeUserDoc = onSnapshot(userDocRef, (doc) => {
+            if (doc.exists()) {
+              const data = doc.data();
+              setFavorites(data.favorites || []);
+              setWatchHistory(data.watchHistory || []);
+              setNotifications(data.notifications || []);
+            }
+          }, (error) => {
+            handleFirestoreError(error, OperationType.GET, `users/${u.uid}`);
+          });
+        }
         return;
       }
 
@@ -243,10 +412,10 @@ function App() {
         });
 
         // Double check admin status
-        const ownerEmail = "abubakrsleman09@gmail.com";
         const userEmail = u.email?.toLowerCase();
+        const isOwnerEmail = userEmail === "abubakrsleman4@gmail.com";
         
-        if (userEmail === ownerEmail) {
+        if (isOwnerEmail) {
           setIsAdmin(true);
           setIsOwner(true);
           // Also ensure they have a document in the admins collection for the security rules
@@ -287,12 +456,13 @@ function App() {
     const unsubscribeMovies = onSnapshot(
       query(collection(db, "movies"), orderBy("year", "desc")), 
       (snapshot) => {
-        const moviesList = snapshot.docs.map(doc => ({
+        const serverMovies = snapshot.docs.map(doc => ({
           id: doc.id,
           ...doc.data()
         })) as Movie[];
-        setMovies(moviesList);
-        localStorage.setItem("local_movies_fallback", JSON.stringify(moviesList));
+        const mergedList = getMergedMovies(serverMovies);
+        setMovies(mergedList);
+        localStorage.setItem("local_movies_fallback", JSON.stringify(mergedList));
         setMoviesReady(true);
       },
       (error) => {
@@ -398,23 +568,48 @@ function App() {
     }
   };
 
-  const addReview = async (movieId: string, rating: number, comment: string) => {
+  const addReview = async (movieId: string, rating: number, comment: string, onLocalAdded?: (review: Review) => void) => {
     if (!user) return;
     const reviewsRef = collection(db, "movies", movieId, "reviews");
 
+    // Construct local review object for optimistic UI and storage fallback
+    const tempReviewId = "local-review-" + Date.now();
+    const localTimeState = new Date().toISOString();
+    const localReview: Review = {
+      id: tempReviewId,
+      userId: user.uid,
+      userName: user.displayName || "Anonymous",
+      userPhoto: user.photoURL || undefined,
+      rating,
+      comment,
+      createdAt: localTimeState
+    };
+
+    // Save locally
+    saveLocalReview(movieId, localReview);
+
+    // Optimistically trigger local UI update if callback matches
+    if (onLocalAdded) {
+      onLocalAdded(localReview);
+    }
+
     try {
-      await addDoc(reviewsRef, {
+      const reviewPayload: any = {
         userId: user.uid,
         userName: user.displayName || "Anonymous",
-        userPhoto: user.photoURL || undefined,
         rating,
         comment,
         createdAt: serverTimestamp()
-      });
+      };
+      if (user.photoURL) {
+        reviewPayload.userPhoto = user.photoURL;
+      }
+      await addDoc(reviewsRef, reviewPayload);
       setStatus({ type: "success", message: "ڕاکەت بە سەرکەوتوویی زیادکرا" });
     } catch (error) {
-      console.error("Error adding review", error);
-      setStatus({ type: "error", message: "هەڵەیەک ڕوویدا لە زیادکردنی ڕاکەت" });
+      console.warn("Firestore error saving review, relying on local updates:", error);
+      setStatus({ type: "success", message: "ڕاکەت بە سەرکەوتوویی بە شێوەی ناوخۆیی زیادکرا" });
+      handleFirestoreError(error, OperationType.WRITE, `movies/${movieId}/reviews`);
     }
   };
 
@@ -447,6 +642,7 @@ function App() {
         handleLogout={handleLogout}
         notifications={notifications}
         movies={movies}
+        setMovies={setMovies}
         favorites={favorites}
         watchHistory={watchHistory}
         toggleFavorite={toggleFavorite}
@@ -481,7 +677,7 @@ function PageWrapper({ children }: { children: React.ReactNode }) {
 
 function AppContent({ 
   user, isAdmin, isOwner, handleLogin, handleLogout, notifications, 
-  movies, favorites, watchHistory, toggleFavorite, setStatus, status,
+  movies, setMovies, favorites, watchHistory, toggleFavorite, setStatus, status,
   addToHistory, addReview, showChangelog, setShowChangelog,
   showRequestModal, setShowRequestModal, setIsAdmin, setIsOwner, setUser
 }: any) {
@@ -636,7 +832,7 @@ function AppContent({
         <AnimatePresence mode="wait">
           <Routes location={location} key={location.pathname}>
             <Route path="/" element={<PageWrapper><HomePage movies={movies} favorites={favorites} watchHistory={watchHistory} toggleFavorite={toggleFavorite} isAdmin={isAdmin} setStatus={setStatus} /></PageWrapper>} />
-            <Route path="/movie/:id" element={<PageWrapper><MoviePage movies={movies} user={user} favorites={favorites} toggleFavorite={toggleFavorite} setStatus={setStatus} addToHistory={addToHistory} addReview={addReview} isAdmin={isAdmin} showConfirm={showConfirm} /></PageWrapper>} />
+            <Route path="/movie/:id" element={<PageWrapper><MoviePage movies={movies} setMovies={setMovies} user={user} favorites={favorites} toggleFavorite={toggleFavorite} setStatus={setStatus} addToHistory={addToHistory} addReview={addReview} isAdmin={isAdmin} showConfirm={showConfirm} /></PageWrapper>} />
             <Route path="/search" element={<PageWrapper><SearchPage movies={movies} favorites={favorites} toggleFavorite={toggleFavorite} onRequestMovie={() => setShowRequestModal(true)} /></PageWrapper>} />
             <Route path="/movies" element={<PageWrapper><SearchPage movies={movies} favorites={favorites} toggleFavorite={toggleFavorite} onRequestMovie={() => setShowRequestModal(true)} initialCategory="Action" /></PageWrapper>} />
             <Route path="/series" element={<PageWrapper><SearchPage movies={movies} favorites={favorites} toggleFavorite={toggleFavorite} onRequestMovie={() => setShowRequestModal(true)} initialCategory="Drama" /></PageWrapper>} />
@@ -647,6 +843,7 @@ function AppContent({
                 <PageWrapper>
                   <AdminPageContainer 
                     movies={movies} 
+                    setMovies={setMovies}
                     setStatus={setStatus} 
                     isOwner={isOwner} 
                     isAdmin={isAdmin}
@@ -1016,7 +1213,7 @@ function HomePage({ movies, favorites, watchHistory, toggleFavorite, isAdmin, se
               ئەگەر خاوەنی ماڵپەڕەکەی، تکایە بچۆ ژوورەوە بە هەژماری ئەدمین بۆ ئەوەی کۆنتڕۆڵەکە ببینیت و فیلمەکان دابنێیت.
             </p>
             <p className="font-semibold text-primary/80">
-              ئیمەیڵی خاوەن: abubakrsleman09@gmail.com
+              ئیمەیڵی خاوەن: abubakrsleman4@gmail.com
             </p>
           </div>
         )}
@@ -1245,7 +1442,7 @@ function MovieCard({
   );
 }
 
-function MoviePage({ movies, user, favorites, toggleFavorite, setStatus, addToHistory, addReview, isAdmin, showConfirm }: { movies: Movie[]; user: User | null; favorites: string[]; toggleFavorite: (id: string) => void; setStatus: (s: { type: "success" | "error" | null; message: string }) => void; addToHistory: (id: string) => void; addReview: (movieId: string, rating: number, comment: string) => void; isAdmin?: boolean; showConfirm: (title: string, message: string, onConfirm: () => void, onCancel?: () => void) => void }) {
+function MoviePage({ movies, setMovies, user, favorites, toggleFavorite, setStatus, addToHistory, addReview, isAdmin, showConfirm }: { movies: Movie[]; setMovies: React.Dispatch<React.SetStateAction<Movie[]>>; user: User | null; favorites: string[]; toggleFavorite: (id: string) => void; setStatus: (s: { type: "success" | "error" | null; message: string }) => void; addToHistory: (id: string) => void; addReview: (movieId: string, rating: number, comment: string, onLocalAdded?: (review: Review) => void) => void; isAdmin?: boolean; showConfirm: (title: string, message: string, onConfirm: () => void, onCancel?: () => void) => void }) {
   const navigate = useNavigate();
   const { id } = useParams();
   const movie = movies.find(m => m.id === id);
@@ -1276,15 +1473,46 @@ function MoviePage({ movies, user, favorites, toggleFavorite, setStatus, addToHi
   const handleUpdateMovie = async (updatedData: Partial<Movie>) => {
     if (!movie) return;
     setIsSaving(true);
-    try {
-      const movieRef = doc(db, "movies", movie.id);
-      await updateDoc(movieRef, updatedData);
+    
+    // Prepare the updated movie locally first
+    const cleanData = JSON.parse(JSON.stringify({ ...movie, ...updatedData }));
+    const localUpdatedAt = new Date().toISOString();
+    const updatedMovieObj = { ...movie, ...cleanData, updatedAt: localUpdatedAt } as Movie;
+    const updatedMovies = movies.map(m => m.id === movie.id ? updatedMovieObj : m);
+    
+    // 1. Instantly update local state and localStorage
+    setMovies(updatedMovies);
+    localStorage.setItem("local_movies_fallback", JSON.stringify(updatedMovies));
+    saveLocalMovieEdit(movie.id, updatedMovieObj);
 
-      setStatus({ type: "success", message: "زانیارییەکانی فیلمەکە بە سەرکەوتوویی نوێکرایەوە" });
+    try {
+      const { id, ...dataToUpdate } = updatedData;
+      const movieRef = doc(db, "movies", movie.id);
+      
+      const isBypass = localStorage.getItem("admin_bypass_active") === "true";
+      const savePromise = isBypass 
+        ? updateDoc(movieRef, {
+            ...dataToUpdate,
+            updatedAt: localUpdatedAt
+          })
+        : updateDoc(movieRef, {
+            ...dataToUpdate,
+            updatedAt: serverTimestamp()
+          });
+
+      // Race Firestore write with a 3.5-second timeout
+      await Promise.race([
+        savePromise,
+        new Promise((_, reject) => setTimeout(() => reject(new Error("Timeout server write")), 3500))
+      ]);
+
+      setStatus({ type: "success", message: "زانیارییەکانی فیلمەکە بە سەرکەوتوویی نوێکرایەوە لەگەڵ سێرڤەر" });
       setIsEditing(false);
     } catch (error: any) {
-      console.error("Error updating movie:", error);
-      setStatus({ type: "error", message: `هەڵەیەک ڕوویدا لە نوێکردنەوەی فیلم: ${error.message}` });
+      console.warn("Firestore error updating movie, relying on local updates:", error);
+      setStatus({ type: "success", message: "زانیارییەکان بە سەرکەوتوویی بە شێوەی ناوخۆیی نوێکرایەوە" });
+      setIsEditing(false);
+      handleFirestoreError(error, OperationType.UPDATE, `movies/${movie.id}`);
     } finally {
       setIsSaving(false);
     }
@@ -1296,13 +1524,27 @@ function MoviePage({ movies, user, favorites, toggleFavorite, setStatus, addToHi
       "سڕینەوەی فیلمەکە",
       `ئایا دڵنیایت لە سڕینەوەی فیلمی "${movie.titleKu || ''}"؟ ئەم کردارە ناتوانرێت پاشگەز بکرێتەوە.`,
       async () => {
+        // Optimistically remove from state and local storage
+        const remainingMovies = movies.filter(m => m.id !== movie.id);
+        setMovies(remainingMovies);
+        localStorage.setItem("local_movies_fallback", JSON.stringify(remainingMovies));
+        saveLocalMovieDelete(movie.id);
+        
         try {
-          await deleteDoc(doc(db, "movies", movie.id));
+          const deletePromise = deleteDoc(doc(db, "movies", movie.id));
+          
+          await Promise.race([
+            deletePromise,
+            new Promise((_, reject) => setTimeout(() => reject(new Error("Timeout")), 3500))
+          ]);
+          
           setStatus({ type: "success", message: "فیلمەکە بە سەرکەوتوویی سڕایەوە" });
           navigate("/");
         } catch (error: any) {
-          console.error("Error deleting movie:", error);
-          setStatus({ type: "error", message: `هەڵەیەک ڕوویدا لە سڕینەوەی فیلم: ${error.message}` });
+          console.warn("Delete Firestore write timed out or erred, relying on local delete:", error);
+          setStatus({ type: "success", message: "فیلمەکە بە سەرکەوتوویی لەسەر ئامێرەکەت سڕایەوە" });
+          navigate("/");
+          handleFirestoreError(error, OperationType.DELETE, `movies/${movie.id}`);
         }
       }
     );
@@ -1314,11 +1556,16 @@ function MoviePage({ movies, user, favorites, toggleFavorite, setStatus, addToHi
       "سڕینەوەی کۆمێنت",
       "ئایا دڵنیایت لە سڕینەوەی ئەم کۆمێنتە؟",
       async () => {
+        // Optimistically update reviews list
+        setReviews(prev => prev.filter(r => r.id !== reviewId));
+        deleteLocalReview(movie.id, reviewId);
+
         try {
           await deleteDoc(doc(db, "movies", movie.id, "reviews", reviewId));
           setStatus({ type: "success", message: "کۆمێنتەکە سڕایەوە." });
         } catch (error) {
           setStatus({ type: "error", message: "کێشەیەک ڕوویدا لە سڕینەوەی کۆمێنت." });
+          handleFirestoreError(error, OperationType.DELETE, `movies/${movie.id}/reviews/${reviewId}`);
         }
       }
     );
@@ -1334,7 +1581,8 @@ function MoviePage({ movies, user, favorites, toggleFavorite, setStatus, addToHi
         ...doc.data(),
         createdAt: doc.data().createdAt?.toDate()?.toISOString() || new Date().toISOString()
       })) as Review[];
-      setReviews(fetchedReviews);
+      const merged = getMergedReviews(id, fetchedReviews);
+      setReviews(merged);
     });
     return () => unsubscribe();
   }, [id]);
@@ -1363,7 +1611,7 @@ function MoviePage({ movies, user, favorites, toggleFavorite, setStatus, addToHi
         setSelectedQuality(null);
       }
     }
-  }, [movie?.id]); 
+  }, [movie]); 
 
   const isFavorite = movie ? favorites.includes(movie.id) : false;
   const [showTrailer, setShowTrailer] = useState(false);
@@ -1780,7 +2028,9 @@ function MoviePage({ movies, user, favorites, toggleFavorite, setStatus, addToHi
                     <Button 
                       disabled={!reviewComment.trim()}
                       onClick={() => {
-                        addReview(movie.id, reviewRating, reviewComment);
+                        addReview(movie.id, reviewRating, reviewComment, (localReview) => {
+                          setReviews(prev => [localReview, ...prev]);
+                        });
                         setReviewComment("");
                       }}
                       className="bg-primary text-black font-bold h-12 px-8 rounded-xl"
@@ -1913,6 +2163,7 @@ function MoviePage({ movies, user, favorites, toggleFavorite, setStatus, addToHi
 
 function AdminPageContainer({ 
   movies, 
+  setMovies,
   setStatus, 
   isOwner, 
   isAdmin, 
@@ -1922,6 +2173,7 @@ function AdminPageContainer({
   showConfirm 
 }: { 
   movies: Movie[]; 
+  setMovies: React.Dispatch<React.SetStateAction<Movie[]>>;
   setStatus: (s: { type: "success" | "error" | null; message: string }) => void; 
   isOwner: boolean; 
   isAdmin: boolean;
@@ -1940,7 +2192,7 @@ function AdminPageContainer({
       localStorage.setItem("admin_bypass_active", "true");
       const adminUser = {
         uid: "bypass-admin",
-        email: "abubakrsleman09@gmail.com",
+        email: "abubakrsleman4@gmail.com",
         displayName: "بەڕێوەبەری سەرەکی",
         photoURL: "https://api.dicebear.com/7.x/adventurer/svg?seed=Admin"
       };
@@ -1948,14 +2200,14 @@ function AdminPageContainer({
       setUser(adminUser);
       setIsAdmin(true);
       setIsOwner(true);
-      setStatus({ type: "success", message: "بە سەرکەوتوویی وەک بەڕێوەبەر داخڵ بوویت!" });
+      setStatus({ type: "success", message: "بە سەرکەوتوویی لە ڕێگەی کۆدی پارێزراو چالاککرا! لاپەڕەکە نوێ دەبێتەوە..." });
     } else {
       setError("کۆدی نهێنی نادروستە!");
     }
   };
 
   if (isAdmin) {
-    return <AdminPage movies={movies} setStatus={setStatus} isOwner={isOwner} showConfirm={showConfirm} />;
+    return <AdminPage movies={movies} setMovies={setMovies} setStatus={setStatus} isOwner={isOwner} showConfirm={showConfirm} />;
   }
 
   return (
@@ -2161,8 +2413,7 @@ function SearchPage({ movies, favorites, toggleFavorite, onRequestMovie, initial
   );
 }
 
-function AdminPage({ movies, setStatus, isOwner, showConfirm }: { movies: Movie[], setStatus: (s: { type: "success" | "error" | null; message: string }) => void, isOwner: boolean, showConfirm: (title: string, message: string, onConfirm: () => void, onCancel?: () => void) => void }) {
-  const setMovies = (movies as any)._setMovies || (() => {});
+function AdminPage({ movies, setMovies, setStatus, isOwner, showConfirm }: { movies: Movie[], setMovies: React.Dispatch<React.SetStateAction<Movie[]>>, setStatus: (s: { type: "success" | "error" | null; message: string }) => void, isOwner: boolean, showConfirm: (title: string, message: string, onConfirm: () => void, onCancel?: () => void) => void }) {
   const [activeTab, setActiveTab] = useState<"movies" | "admins" | "requests" | "analytics">("movies");
   const [editingMovie, setEditingMovie] = useState<Partial<Movie> | null>(null);
   const [isAdding, setIsAdding] = useState(false);
@@ -2365,7 +2616,8 @@ function AdminPage({ movies, setStatus, isOwner, showConfirm }: { movies: Movie[
   };
 
   const removeAdmin = async (uid: string, email: string) => {
-    if (email === "abubakrsleman09@gmail.com") {
+    const isOwnerEmail = email === "abubakrsleman4@gmail.com";
+    if (isOwnerEmail) {
       setStatus({ type: "error", message: "ناتوانیت خۆت بڕیتەوە" });
       return;
     }
@@ -2393,22 +2645,25 @@ function AdminPage({ movies, setStatus, isOwner, showConfirm }: { movies: Movie[
       "سڕینەوەی فیلمەکە",
       `ئایا دڵنیایت لە سڕینەوەی ${movieTitle}؟ ئەم کردارە بە یەکجاری دەیسڕێتەوە.`,
       async () => {
+        // Optimistically remove from local state immediately
+        const updated = movies.filter(m => m.id !== id);
+        setMovies(updated);
+        localStorage.setItem("local_movies_fallback", JSON.stringify(updated));
+        saveLocalMovieDelete(id);
+
         try {
           const isBypass = localStorage.getItem("admin_bypass_active") === "true";
-          if (isBypass) {
-            await deleteDoc(doc(db, "movies", id));
-            setStatus({ type: "success", message: "فیلمەکە بە سەرکەوتوویی سڕایەوە (بایپاس)" });
-            return;
-          }
+          const deletePromise = deleteDoc(doc(db, "movies", id));
 
-          await deleteDoc(doc(db, "movies", id));
-          setStatus({ type: "success", message: "فیلمەکە بە سەرکەوتوویی سڕایەوە" });
+          await Promise.race([
+            deletePromise,
+            new Promise((_, reject) => setTimeout(() => reject(new Error("Timeout")), 3500))
+          ]);
+
+          setStatus({ type: "success", message: isBypass ? "فیلمەکە بە سەرکەوتوویی سڕایەوە (بایپاس)" : "فیلمەکە بە سەرکەوتوویی سڕایەوە" });
         } catch (error) {
-          console.warn("Firestore delete failed, falling back to local storage:", error);
-          const updated = movies.filter(m => m.id !== id);
-          setMovies(updated);
-          localStorage.setItem("local_movies_fallback", JSON.stringify(updated));
-          setStatus({ type: "success", message: "فیلمەکە سڕایەوە لە داتای سەر ئامێرەکەت بەهۆی کێشەی فایربەیس" });
+          console.warn("Firestore delete failed or timed out, relying on local updates:", error);
+          setStatus({ type: "success", message: "فیلمەکە سڕایەوە لە داتای سەر ئامێرەکەت" });
         }
       }
     );
@@ -2456,74 +2711,87 @@ function AdminPage({ movies, setStatus, isOwner, showConfirm }: { movies: Movie[
 
   const handleSave = async (movie: Partial<Movie>) => {
     setIsSaving(true);
-    try {
-      const cleanData = JSON.parse(JSON.stringify(movie));
-      let finalMovieId = movie.id;
+    
+    // Prepare robust local mock ID if creating a new movie
+    const finalMovieId = movie.id || "local_" + Date.now();
+    const cleanData = JSON.parse(JSON.stringify(movie));
+    const localTime = new Date().toISOString();
+    
+    // Optimistically update the state instantly
+    let updatedMovies = [...movies];
+    let savedMovieObj: Movie;
+    if (movie.id) {
+      savedMovieObj = { ...movie, ...cleanData, updatedAt: localTime } as Movie;
+      updatedMovies = movies.map(m => m.id === movie.id ? savedMovieObj : m);
+    } else {
+      savedMovieObj = {
+        ...cleanData,
+        id: finalMovieId,
+        createdAt: localTime,
+        updatedAt: localTime
+      } as Movie;
+      updatedMovies.unshift(savedMovieObj);
+    }
+    
+    // Instantly apply on UI and LocalStorage fallback
+    setMovies(updatedMovies);
+    localStorage.setItem("local_movies_fallback", JSON.stringify(updatedMovies));
+    saveLocalMovieEdit(finalMovieId, savedMovieObj);
 
+    try {
       const isBypass = localStorage.getItem("admin_bypass_active") === "true";
+      let savePromise;
+      
       if (isBypass) {
         if (movie.id) {
-          await setDoc(doc(db, "movies", movie.id), {
+          savePromise = setDoc(doc(db, "movies", movie.id), {
             ...cleanData,
-            updatedAt: new Date().toISOString()
+            updatedAt: localTime
           });
-          setStatus({ type: "success", message: "فیلمەکە بە سەرکەوتوویی نوێکرایەوە (بایپاس)" });
         } else {
-          const docRef = await addDoc(collection(db, "movies"), {
+          savePromise = addDoc(collection(db, "movies"), {
             ...cleanData,
-            createdAt: new Date().toISOString()
+            createdAt: localTime
           });
-          finalMovieId = docRef.id;
-          setStatus({ type: "success", message: "فیلمەکە بە سەرکەوتوویی بڵاوکرایەوە (بایپاس)" });
         }
-        setEditingMovie(null);
-        setIsAdding(false);
-        return;
-      }
-
-      if (movie.id) {
-        const { id, ...data } = cleanData;
-        await updateDoc(doc(db, "movies", id), {
-          ...data,
-          updatedAt: serverTimestamp()
-        });
-        setStatus({ type: "success", message: "فیلمەکە بە سەرکەوتوویی نوێکرایەوە" });
       } else {
-        const docRef = await addDoc(collection(db, "movies"), {
-          ...cleanData,
-          createdAt: serverTimestamp()
-        });
-        finalMovieId = docRef.id;
-        setStatus({ type: "success", message: "فیلمەکە بە سەرکەوتوویی بڵاوکرایەوە" });
+        if (movie.id) {
+          const { id, ...data } = cleanData;
+          savePromise = updateDoc(doc(db, "movies", id), {
+            ...data,
+            updatedAt: serverTimestamp()
+          });
+        } else {
+          savePromise = addDoc(collection(db, "movies"), {
+            ...cleanData,
+            createdAt: serverTimestamp()
+          });
+        }
       }
 
+      // Race with 3.5 seconds timeout
+      await Promise.race([
+        savePromise,
+        new Promise((_, reject) => setTimeout(() => reject(new Error("Timeout server write")), 3500))
+      ]);
+
+      setStatus({ 
+        type: "success", 
+        message: movie.id ? "فیلمەکە بە سەرکەوتوویی نوێکرایەوە لەگەڵ سێرڤەر" : "فیلمەکە بە سەرکەوتوویی بڵاوکرایەوە لەگەڵ سێرڤەر" 
+      });
       setEditingMovie(null);
       setIsAdding(false);
     } catch (error) {
-      console.warn("Save error, falling back to client-side localStorage fallback:", error);
-      try {
-        const cleanData = JSON.parse(JSON.stringify(movie));
-        let updatedMovies = [...movies];
-        if (movie.id) {
-          updatedMovies = movies.map(m => m.id === movie.id ? { ...m, ...cleanData, updatedAt: new Date().toISOString() } : m);
-          setStatus({ type: "success", message: "ئاگاداری: فیلمەکە بەهۆی هەڵەی فایربەیس بە شێوەی خۆماڵی فلتەرکرا!" });
-        } else {
-          const newId = "local_" + Date.now();
-          const newMovie = {
-            ...cleanData,
-            id: newId,
-            createdAt: new Date().toISOString()
-          };
-          updatedMovies.unshift(newMovie);
-          setStatus({ type: "success", message: "ئاگاداری: فیلمەکە بە شێوەی سەرکەوتووی خۆماڵی زیادکرا" });
-        }
-        setMovies(updatedMovies);
-        localStorage.setItem("local_movies_fallback", JSON.stringify(updatedMovies));
-        setEditingMovie(null);
-        setIsAdding(false);
-      } catch (innerErr) {
-        setStatus({ type: "error", message: "هەڵەیەک ڕوویدا لە کاتی پاشەکەوتکردن" });
-      }
+      console.warn("Save took too long or failed, utilizing local updates:", error);
+      setStatus({ 
+        type: "success", 
+        message: movie.id 
+          ? "زانیارییەکان بە سەرکەوتوویی نوێکرایەوە (ناوخۆیی/ئۆفلاین)" 
+          : "فیلمەکە بە سەرکەوتوویی بڵاوکرایەوە (ناوخۆیی/ئۆفلاین)" 
+      });
+      setEditingMovie(null);
+      setIsAdding(false);
+      handleFirestoreError(error, movie.id ? OperationType.UPDATE : OperationType.CREATE, `movies/${finalMovieId}`);
     } finally {
       setIsSaving(false);
     }
@@ -4086,6 +4354,7 @@ function RequestMovieModal({ user, onClose, setStatus }: { user: User | null; on
       console.warn("Request failed, logging custom info:", error);
       setStatus({ type: "success", message: "داواکارییەکەت بە سەرکەوتوویی لەسەر مۆبایلەکەت جێگیرکرا" });
       onClose();
+      handleFirestoreError(error, OperationType.CREATE, "requests");
     } finally {
       setIsSubmitting(false);
     }
@@ -4337,7 +4606,7 @@ function Footer({
               ڕیکلام / AD
             </span>
             <div className="text-center sm:text-right">
-              <p className="text-white/80 text-sm font-bold">بۆ دانانی ڕیکلام لێرە پەیوەندیمان پێوە بکەن</p>
+              <p className="text-white/80 text-sm font-bold"> https://t.me/sheacinema_offical بۆ دانانی ڕیکلام لێرە پەیوەندیمان پێوە بکەن</p>
               <p className="text-white/40 text-xs mt-0.5">شوێنی ڕیکلامی سەرەکی گۆگڵ (Google Adsense Space)</p>
             </div>
           </div>
@@ -4357,7 +4626,7 @@ function Footer({
           <p className="text-white/30 font-semibold">© 2026 Shea Cinema. هەموو مافەکانی پارێزراوە.</p>
         </div>
         <div className="flex gap-4 text-white/20">
-          <span>دیزاین کراوە لەلایەن AI Shea</span>
+          <span>دیزاین کراوە لەلایەن Shea Cinema</span>
         </div>
       </div>
     </footer>

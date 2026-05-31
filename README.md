@@ -18,4 +18,3 @@ View my account telegram: https://t.me/sheacinema_offical
 2. Set the `shea_cinema-creator` in [.env.local](.env.local) to your Gemini API key
 3. Run the app:
    `npm run dev`
-
