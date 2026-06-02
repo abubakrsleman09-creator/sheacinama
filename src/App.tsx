@@ -5,6 +5,9 @@ import { Film, Award, Send, Volume2, Shield, Flame, Activity } from 'lucide-reac
 // Types
 import { Movie } from './types';
 
+// Static fallback movies directly from movies.json
+import staticFallbackMovies from '../movies.json';
+
 // Components
 import { Header } from './components/Header';
 import { FeaturedBanner } from './components/FeaturedBanner';
@@ -83,44 +86,61 @@ export default function App() {
     try {
       setIsLoading(true);
       const res = await fetch('/api/movies');
-      if (res.ok) {
-        const rawServerMovies = await res.json() as Movie[];
-        
-        // Ensure rawServerMovies itself is unique
-        const serverMovieMap = new Map<string, Movie>();
-        rawServerMovies.forEach(m => {
-          if (m && m.id) serverMovieMap.set(m.id, m);
-        });
-        const serverMovies = Array.from(serverMovieMap.values());
-        
-        // Load from LocalStorage to see if we have newer/custom movies
-        const localMoviesStr = localStorage.getItem('shea_cinema_user_movies');
-        let finalMovies = serverMovies;
-        
-        if (localMoviesStr) {
-          try {
-            const localMovies = JSON.parse(localMoviesStr) as Movie[];
+      if (!res.ok) {
+        throw new Error(`سێرڤەر وەڵامی نەدایەوە بە دروستی: ${res.status}`);
+      }
+      
+      const rawServerMovies = await res.json() as Movie[];
+      if (!Array.isArray(rawServerMovies)) {
+        throw new Error("داتای وەرگیراو لە سێرڤەرەوە لیست نییە");
+      }
+      
+      // Ensure rawServerMovies itself is unique
+      const serverMovieMap = new Map<string, Movie>();
+      rawServerMovies.forEach(m => {
+        if (m && m.id) serverMovieMap.set(m.id, m);
+      });
+      let serverMovies = Array.from(serverMovieMap.values());
+
+      // If the server list is completely empty, populate with statically imported movies!
+      // This protects against server storage resets, database wipes, and early stages.
+      if (serverMovies.length === 0) {
+        serverMovies = staticFallbackMovies as Movie[];
+      }
+      
+      // Load from LocalStorage to see if we have newer/custom movies
+      const localMoviesStr = localStorage.getItem('shea_cinema_user_movies');
+      let finalMovies = serverMovies;
+      
+      if (localMoviesStr) {
+        try {
+          const localMovies = JSON.parse(localMoviesStr);
+          if (Array.isArray(localMovies)) {
             const movieMap = new Map<string, Movie>();
             
             // 1. Add unique server movies first
-            serverMovies.forEach(m => movieMap.set(m.id, m));
+            serverMovies.forEach(m => {
+              if (m && m.id) movieMap.set(m.id, m);
+            });
             
             // 2. Add local movies (which may contain additional user-added movies lost from ephemeral container restart)
             let hasNewMovieToUpload = false;
             localMovies.forEach(m => {
-              if (m && m.id && !movieMap.has(m.id)) {
-                movieMap.set(m.id, m);
-                hasNewMovieToUpload = true;
-                
-                // Proactively restore to the server if the server was reset/rebuilt
-                fetch('/api/movies', {
-                  method: 'POST',
-                  headers: {
-                    'Content-Type': 'application/json',
-                    'x-admin-password': 'ibos-808'
-                  },
-                  body: JSON.stringify(m)
-                }).catch(err => console.error("Auto-sync back error", err));
+              if (m && m.id) {
+                if (!movieMap.has(m.id)) {
+                  movieMap.set(m.id, m);
+                  hasNewMovieToUpload = true;
+                  
+                  // Proactively restore to the server if the server was reset/rebuilt
+                  fetch('/api/movies', {
+                    method: 'POST',
+                    headers: {
+                      'Content-Type': 'application/json',
+                      'x-admin-password': 'ibos-808'
+                    },
+                    body: JSON.stringify(m)
+                  }).catch(err => console.error("Auto-sync back error", err));
+                }
               }
             });
             
@@ -134,43 +154,62 @@ export default function App() {
                 fetch('/api/movies')
                   .then(r => r.json())
                   .then((latest: Movie[]) => {
-                    const uniqueLatestMap = new Map<string, Movie>();
-                    latest.forEach(m => {
-                      if (m && m.id) uniqueLatestMap.set(m.id, m);
-                    });
-                    const uniqueLatest = Array.from(uniqueLatestMap.values());
-                    setMovies(uniqueLatest);
-                    safeSaveLocalMovies(uniqueLatest);
+                    if (Array.isArray(latest)) {
+                      setMovies(latest);
+                      safeSaveLocalMovies(latest);
+                    }
                   })
                   .catch(err => console.error("Delayed refresh error", err));
               }, 2000);
             }
-          } catch (e) {
-            console.error(e);
           }
+        } catch (e) {
+          console.error("error parsing localStorage", e);
         }
-        
-        // Ensure final absolute unique set
-        const finalUniqueMap = new Map<string, Movie>();
-        finalMovies.forEach(m => {
-          if (m && m.id) finalUniqueMap.set(m.id, m);
-        });
-        const absoluteUniqueMovies = Array.from(finalUniqueMap.values());
-        
-        setMovies(absoluteUniqueMovies);
-        safeSaveLocalMovies(absoluteUniqueMovies);
       }
+      
+      // Ensure final absolute unique set
+      const finalUniqueMap = new Map<string, Movie>();
+      finalMovies.forEach(m => {
+        if (m && m.id) {
+          finalUniqueMap.set(m.id, m);
+        }
+      });
+      const absoluteUniqueMovies = Array.from(finalUniqueMap.values());
+      
+      setMovies(absoluteUniqueMovies);
+      safeSaveLocalMovies(absoluteUniqueMovies);
     } catch (err) {
-      console.error("Failed loading index movies", err);
-      // Fallback complete to local storage
+      console.error("Failed loading index movies, using fallback mechanisms", err);
+      // Fallback: Check local storage, or statically bundled movies.json!
       const localMoviesStr = localStorage.getItem('shea_cinema_user_movies');
+      let fallbackMovies: Movie[] = [];
       if (localMoviesStr) {
         try {
-          setMovies(JSON.parse(localMoviesStr));
+          const parsedLocal = JSON.parse(localMoviesStr);
+          if (Array.isArray(parsedLocal)) {
+            const finalFallbackMap = new Map<string, Movie>();
+            
+            // Add custom local user movies
+            parsedLocal.forEach(m => {
+              if (m && m.id) {
+                finalFallbackMap.set(m.id, m);
+              }
+            });
+            
+            fallbackMovies = Array.from(finalFallbackMap.values());
+            fallbackMovies.sort((a, b) => new Date(b.createdAt || '').getTime() - new Date(a.createdAt || '').getTime());
+          }
         } catch (e) {
           console.error(e);
         }
       }
+      
+      // If local storage is empty, fallback to the statically bundled list!
+      if (fallbackMovies.length === 0) {
+        fallbackMovies = staticFallbackMovies as Movie[];
+      }
+      setMovies(fallbackMovies);
     } finally {
       setIsLoading(false);
     }
@@ -186,7 +225,16 @@ export default function App() {
       fetch(`/api/movies`)
         .then(res => res.json())
         .then((allMovies: Movie[]) => {
-          const match = allMovies.find(m => m.id === sharedMovieId);
+          const list = Array.isArray(allMovies) ? allMovies : staticFallbackMovies as Movie[];
+          const match = list.find(m => m.id === sharedMovieId);
+          if (match) {
+            setSelectedMovie(match);
+            setIsDetailOpen(true);
+          }
+        })
+        .catch(() => {
+          // Robust fallback search from the static fallback list
+          const match = (staticFallbackMovies as Movie[]).find(m => m.id === sharedMovieId);
           if (match) {
             setSelectedMovie(match);
             setIsDetailOpen(true);
@@ -245,35 +293,59 @@ export default function App() {
   // Admin capabilities (directly triggers from unlocked state on main grids)
   const handleDeleteMovie = async (id: string) => {
     if (!window.confirm("دڵنیای لە سڕینەوەی ئەم بابەتە؟")) return;
-    try {
-      const response = await fetch(`/api/movies/${id}`, {
-        method: 'DELETE',
-        headers: { 'x-admin-password': 'ibos-808' } // Passcode matches backend seed
-      });
-      if (response.ok) {
-        // Remove from local storage first to sync
-        const localMoviesStr = localStorage.getItem('shea_cinema_user_movies');
-        if (localMoviesStr) {
-          try {
-            const localMovies = JSON.parse(localMoviesStr) as Movie[];
-            const updated = localMovies.filter(m => m.id !== id);
-            safeSaveLocalMovies(updated);
-          } catch (e) {
-            console.error("Local storage delete sync error", e);
-          }
+    
+    // 1. Remove from local storage first to sync immediately
+    const localMoviesStr = localStorage.getItem('shea_cinema_user_movies');
+    let localList = [...movies];
+    if (localMoviesStr) {
+      try {
+        const parsed = JSON.parse(localMoviesStr);
+        if (Array.isArray(parsed)) {
+          localList = parsed;
         }
-        fetchMoviesList();
-      } else {
-        alert("سڕینەوە ئەنجام نەدرا");
+      } catch (e) {
+        console.error(e);
       }
+    }
+    const updated = localList.filter(m => m.id !== id);
+    safeSaveLocalMovies(updated);
+    
+    // Update live state immediately
+    setMovies(updated);
+
+    // 2. Safely call server delete API (fire and forget / gracefully catch offline static environments)
+    try {
+      await fetch(`/api/movies/${id}`, {
+        method: 'DELETE',
+        headers: { 'x-admin-password': 'ibos-808' }
+      });
     } catch (err) {
-      console.error(err);
+      console.warn("Server delete bypassed/failed (static mode)", err);
     }
   };
 
   const handleTogglePinMovie = async (movie: Movie) => {
+    // 1. Toggle pin on local storage and live state immediately
+    const localMoviesStr = localStorage.getItem('shea_cinema_user_movies');
+    let localList = [...movies];
+    if (localMoviesStr) {
+      try {
+        const parsed = JSON.parse(localMoviesStr);
+        if (Array.isArray(parsed)) {
+          localList = parsed;
+        }
+      } catch (e) {
+        console.error(e);
+      }
+    }
+    
+    const updated = localList.map(m => m.id === movie.id ? { ...m, isPinned: !m.isPinned } : m);
+    safeSaveLocalMovies(updated);
+    setMovies(updated);
+
+    // 2. Safely call server PUT API
     try {
-      const response = await fetch(`/api/movies/${movie.id}`, {
+      await fetch(`/api/movies/${movie.id}`, {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
@@ -281,11 +353,8 @@ export default function App() {
         },
         body: JSON.stringify({ isPinned: !movie.isPinned })
       });
-      if (response.ok) {
-        fetchMoviesList();
-      }
     } catch (err) {
-      console.error(err);
+      console.warn("Server pin-toggle bypassed/failed (static mode)", err);
     }
   };
 
