@@ -68,7 +68,7 @@ export function MovieDetailModal({ movie, isOpen, onClose }: MovieDetailModalPro
             className="relative w-full max-w-5xl h-full md:h-auto max-h-[100vh] md:max-h-[92vh] bg-[#0f0f0f] border-0 md:border border-white/10 rounded-none md:rounded-2xl overflow-y-auto no-scrollbar shadow-2xl z-20 flex flex-col"
           >
             {/* Header Toolbar */}
-            <div className="sticky top-0 z-30 bg-[#0f0f0f]/85 backdrop-blur-md border-b border-white/10 px-6 py-4 flex items-center justify-between rtl-dir">
+            <div className="sticky top-0 z-30 bg-[#0f0f0f]/85 backdrop-blur-md border-b border-white/10 px-6 py-4 flex items-center justify-between rtl-dir shrink-0">
               <button
                 onClick={onClose}
                 className="text-gray-400 hover:text-white bg-white/5 hover:bg-white/10 p-2 rounded-full transition-all duration-300"
@@ -83,7 +83,7 @@ export function MovieDetailModal({ movie, isOpen, onClose }: MovieDetailModalPro
             </div>
 
             {/* Video Player Display Area */}
-            <div className="relative aspect-video w-full bg-black flex flex-col items-center justify-center text-center overflow-hidden border-b border-[#1A1A1A]">
+            <div className="relative aspect-video w-full min-h-[210px] md:min-h-0 bg-black flex flex-col items-center justify-center text-center overflow-hidden border-b border-[#1A1A1A] shrink-0">
               {activeServer ? (
                 <iframe
                   title="Watch Player"
@@ -106,7 +106,7 @@ export function MovieDetailModal({ movie, isOpen, onClose }: MovieDetailModalPro
             <div className="p-6 md:p-8 grid grid-cols-1 lg:grid-cols-3 gap-8 rtl-dir text-right">
               
               {/* Left 2 Columns: Movie Information */}
-              <div className="lg:col-span-2 space-y-6">
+              <div className="lg:col-span-2 space-y-6 order-2 lg:order-1">
                 
                 {/* Meta Attributes Row */}
                 <div className="flex flex-wrap items-center gap-4 text-xs md:text-sm">
@@ -161,7 +161,7 @@ export function MovieDetailModal({ movie, isOpen, onClose }: MovieDetailModalPro
               </div>
 
               {/* Right Column: Server Switcher Menu */}
-              <div className="bg-[#1a1a1a] border border-white/10 rounded-2xl p-5 space-y-4">
+              <div className="bg-[#1a1a1a] border border-white/10 rounded-2xl p-5 space-y-4 order-1 lg:order-2">
                 <h3 className="text-sm font-bold text-white flex items-center justify-between ml-1 pb-2 border-b border-white/10">
                   <span>لیستی سێرڤەرەکانی دابینکەر</span>
                   <HardDrive className="w-4 h-4 text-[#FFC80A]" />

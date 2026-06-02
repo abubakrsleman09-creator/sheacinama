@@ -85,6 +85,18 @@ export function Header({
               زنجیرەکان
             </button>
             <button
+              onClick={() => { setActiveTab('korean'); setSearchQuery(''); }}
+              className={`hover:text-[#FFC80A] transition-colors py-1 ${activeTab === 'korean' ? 'text-[#FFC80A] border-b-2 border-[#FFC80A]' : 'text-gray-300'}`}
+            >
+              کۆراوەکان 🇰🇷
+            </button>
+            <button
+              onClick={() => { setActiveTab('collections'); setSearchQuery(''); }}
+              className={`hover:text-[#FFC80A] transition-colors py-1 ${activeTab === 'collections' ? 'text-[#FFC80A] border-b-2 border-[#FFC80A]' : 'text-gray-300'}`}
+            >
+              زنجیرە فیلم 🎬
+            </button>
+            <button
               onClick={() => { setActiveTab('kurdish'); setSearchQuery(''); }}
               className={`hover:text-[#FFC80A] transition-colors py-1 ${activeTab === 'kurdish' ? 'text-[#FFC80A] border-b-2 border-[#FFC80A]' : 'text-gray-300'}`}
             >
@@ -164,6 +176,18 @@ export function Header({
             زنجیرەکان
           </button>
           <button
+            onClick={() => { setActiveTab('korean'); setSearchQuery(''); }}
+            className={`px-2 py-1 ${activeTab === 'korean' ? 'text-[#FFC80A] font-semibold' : 'text-gray-400'}`}
+          >
+            کۆراوەکان
+          </button>
+          <button
+            onClick={() => { setActiveTab('collections'); setSearchQuery(''); }}
+            className={`px-2 py-1 ${activeTab === 'collections' ? 'text-[#FFC80A] font-semibold' : 'text-gray-400'}`}
+          >
+            زنجیرە فیلم
+          </button>
+          <button
             onClick={() => { setActiveTab('kurdish'); setSearchQuery(''); }}
             className={`px-2 py-1 ${activeTab === 'kurdish' ? 'text-[#FFC80A] font-semibold' : 'text-gray-400'}`}
           >
@@ -183,9 +207,9 @@ export function Header({
             placeholder="بگەڕێ..."
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            className="bg-white/5 border border-white/10 focus:border-[#FFC80A] focus:outline-none text-white text-[11px] py-1 pr-6 pl-2 rounded-full w-full text-right"
+            className="bg-white/5 border border-white/10 focus:border-[#FFC80A] focus:outline-none text-white text-[11px] py-1 pr-7 pl-2 rounded-full w-full text-right"
           />
-          <Search className="w-3" />
+          <Search className="w-3 h-3 text-gray-500 absolute top-2 right-2.5" />
         </div>
       </div>
     </header>

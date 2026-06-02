@@ -244,6 +244,38 @@ export default function App() {
           }
         });
     }
+
+    // Set up SSE EventSource for real-time live synchronization
+    const eventSource = new EventSource('/api/movies/live');
+
+    eventSource.onmessage = (event) => {
+      try {
+        const data = JSON.parse(event.data);
+        if (data && data.type === 'sync' && Array.isArray(data.movies)) {
+          console.log('Real-time movie database updated:', data.movies.length);
+          
+          // Absolute unique deduplication
+          const serverMovieMap = new Map<string, Movie>();
+          data.movies.forEach((m: Movie) => {
+            if (m && m.id) serverMovieMap.set(m.id, m);
+          });
+          const uniqueMovies = Array.from(serverMovieMap.values());
+          
+          setMovies(uniqueMovies);
+          safeSaveLocalMovies(uniqueMovies);
+        }
+      } catch (err) {
+        console.error('Error parsing live update:', err);
+      }
+    };
+
+    eventSource.onerror = (err) => {
+      console.warn('Live feedback connection lost, retrying automatically...', err);
+    };
+
+    return () => {
+      eventSource.close();
+    };
   }, []);
 
   // Filter Logic
@@ -261,6 +293,12 @@ export default function App() {
     }
     if (activeTab === 'series') {
       return matchesSearch && movie.contentType === 'series';
+    }
+    if (activeTab === 'korean') {
+      return matchesSearch && (movie.category === 'Korean' || movie.category === 'Drama' || movie.titleKurdish.includes('کۆری') || movie.description.includes('کۆری'));
+    }
+    if (activeTab === 'collections') {
+      return matchesSearch && (movie.category === 'Collection' || movie.category === 'Saga' || movie.isPinned === true || movie.category === 'Anime');
     }
     if (activeTab === 'kurdish') {
       return matchesSearch && movie.category === 'Kurdish';
@@ -455,6 +493,59 @@ export default function App() {
                     </a>
                   </div>
 
+                  {/* "ئێستا سەیردەکرێن" (Now Watching) Section matches Kurdsubtitle feature perfectly! */}
+                  {activeTab === 'home' && !searchQuery && (
+                    <div className="space-y-4 pt-2">
+                      <div className="flex items-center justify-between border-b border-white/10 pb-3 rtl-dir">
+                        <div className="flex items-center gap-2">
+                          <span className="relative flex h-3 w-3">
+                            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75"></span>
+                            <span className="relative inline-flex rounded-full h-3 w-3 bg-red-500"></span>
+                          </span>
+                          <h2 className="text-base md:text-lg font-bold text-white flex items-center gap-1.5">
+                            ئێستا سەیردەکرێن (Currently Watching) 🍿
+                          </h2>
+                        </div>
+                        <span className="text-[10px] text-[#FFC80A] font-medium animate-pulse">شیا سینەما ڕاستەوخۆ 🔴</span>
+                      </div>
+
+                      <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-4">
+                        {movies.slice(0, 6).map((m) => (
+                          <motion.div
+                            key={`trending-${m.id}`}
+                            whileHover={{ scale: 1.03, y: -2 }}
+                            onClick={() => handleOpenPlayer(m)}
+                            className="bg-[#141414] border border-white/5 rounded-xl p-2 cursor-pointer space-y-2 group transition-all duration-300 hover:border-[#FFC80A]/40 flex flex-col justify-between"
+                          >
+                            <div className="relative aspect-[3/4.2] rounded-lg overflow-hidden bg-black">
+                              <img
+                                src={m.posterUrl}
+                                alt={m.titleKurdish}
+                                referrerPolicy="no-referrer"
+                                className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500"
+                              />
+                              <div className="absolute inset-0 bg-gradient-to-t from-black via-transparent to-transparent opacity-80" />
+                              <span className="absolute bottom-1.5 right-1.5 bg-black/80 backdrop-blur-md text-[8px] text-[#FFC80A] px-1.5 py-0.5 rounded font-bold border border-white/10">
+                                {m.rating.toFixed(1)} ★
+                              </span>
+                              <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity bg-black/40">
+                                <div className="p-2 rounded-full bg-[#FFC80A] text-black">
+                                  <svg className="w-4 h-4 fill-black" viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg>
+                                </div>
+                              </div>
+                            </div>
+                            <div className="text-right rtl-dir">
+                              <h3 className="text-xs font-bold text-white group-hover:text-[#FFC80A] transition-colors line-clamp-1">
+                                {m.titleKurdish}
+                              </h3>
+                              <p className="text-[9px] text-gray-500 font-mono truncate">{m.titleEnglish}</p>
+                            </div>
+                          </motion.div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
                   {/* 3. Section headline depending on tab */}
                   <div className="space-y-6">
                     <div className="flex items-center justify-between border-b border-white/10 pb-3 rtl-dir">
@@ -464,6 +555,8 @@ export default function App() {
                         {activeTab === 'home' && !searchQuery && 'نوێترین و گەرمترین بڵاوکراوەکان 🔥'}
                         {activeTab === 'movies' && 'فیلمەکان (Movies)'}
                         {activeTab === 'series' && 'زنجیرە تلویزیۆنیەکان (Series)'}
+                        {activeTab === 'korean' && 'دراما و فیلمە کۆرییە ئاسیاییەکان 🇰🇷'}
+                        {activeTab === 'collections' && 'زنجیرە فیلمە مێژوویی و نوێیەکان 🎬'}
                         {activeTab === 'kurdish' && 'بەرهەمی ناوازەی کوردی (Kurdish)'}
                       </h2>
                       <span className="text-xs text-gray-400 bg-[#1a1a1a] border border-white/10 px-3 py-1 rounded-full font-bold">

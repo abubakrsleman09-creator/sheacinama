@@ -1,51 +1,5 @@
 [
   {
-    "id": "movie-1780349245764-275",
-    "titleKurdish": "جێگۆڕکێ",
-    "titleEnglish": "swapped",
-    "description": "کاتێک ئەم دوو دژمنی سروشتی لەسەر بۆکسێکی سیحری دەستیان دەدات، جووتەکەیان بگۆڕێت، دەبێت فێربن چۆن پێکەوە کار بکەن. نامەی سەرەکی فیلمەکە فێربوون بە ھاوئارەزووی یەکتری و بهایپێنەدانی جیاوازی مێژووییەکانیانە.",
-    "contentType": "movie",
-    "category": "Anime",
-    "rating": 7.0,
-    "year": 2026,
-    "duration": "1h 42m",
-    "isFeatured": false,
-    "isPinned": true,
-    "posterUrl": "https://images.unsplash.com/photo-1607604276583-eef5d076aa5f?auto=format&fit=crop&q=80&w=600",
-    "bannerUrl": "https://images.unsplash.com/photo-1627645835237-0743e52b991f?auto=format&fit=crop&q=80&w=1200",
-    "servers": [
-      {
-        "id": "serv-1780347937851",
-        "name": "vidmoly",
-        "url": "https://vidmoly.biz/embed-lyhm6x323iai.html"
-      }
-    ],
-    "createdAt": "2026-06-01T21:27:25.783Z"
-  },
-  {
-    "id": "movie-war-machine",
-    "titleKurdish": "جەنگی جیهانی ٢٠٢٦",
-    "titleEnglish": "War Machine 2026",
-    "description": "لە ئەفغانستاندا، سەرکردەیەکی بێناو دەبێتە پاڵەوانی سەرەکی لە پارێزگاریکردنی خاکەکەی بەرامبەر سوپایەکی گەورە و پیشەیی. ئەم فیلمە تێکەڵەیەکە لە ئاکشن، جوڵە و تاکتیکە مۆدێرنەکانی شەڕ.",
-    "contentType": "movie",
-    "category": "Action",
-    "rating": 6.1,
-    "year": 2026,
-    "duration": "1h 40m",
-    "isFeatured": false,
-    "isPinned": true,
-    "posterUrl": "https://images.unsplash.com/photo-1509198397868-475647b2a1e5?auto=format&fit=crop&q=80&w=600",
-    "bannerUrl": "https://images.unsplash.com/photo-1547483238-f400e65ccd56?auto=format&fit=crop&q=80&w=1200",
-    "servers": [
-      {
-        "id": "server-1",
-        "name": "vidmoly",
-        "url": "https://vidmoly.biz/embed-oixr2w3v2vkp.html"
-      }
-    ],
-    "createdAt": "2026-05-31T17:24:15.720Z"
-  },
-  {
     "id": "movie-joker-2019",
     "titleKurdish": "جۆکەر",
     "titleEnglish": "Joker",
@@ -56,8 +10,9 @@
     "year": 2019,
     "duration": "2h 2m",
     "isFeatured": false,
-    "posterUrl": "https://image.tmdb.org/t/p/w500/udDcl7Pn0j3gOSgzaW6ESclp6bW.jpg",
-    "bannerUrl": "https://image.tmdb.org/t/p/original/bS6fX7gMv67041906m9gO06mG99.jpg",
+    "isPinned": true,
+    "posterUrl": "https://images.unsplash.com/photo-1594909122845-11baa439b7bf?auto=format&fit=crop&q=80&w=600",
+    "bannerUrl": "https://images.unsplash.com/photo-1536440136628-849c177e76a1?auto=format&fit=crop&q=80&w=1200",
     "servers": [
       {
         "id": "server-3",
@@ -65,7 +20,6 @@
         "url": "https://vidmoly.biz/embed-nxyfw692nlfl.html"
       }
     ],
-    "isPinned": true,
     "createdAt": "2026-05-31T17:24:15.719Z"
   },
   {
@@ -78,7 +32,8 @@
     "rating": 6.9,
     "year": 2024,
     "duration": "1h 20m",
-    "isFeatured": true,
+    "isFeatured": false,
+    "isPinned": true,
     "posterUrl": "https://www.zimihc.nl/content/uploads/2024/08/1988-film-960x540.jpg?x15409",
     "bannerUrl": "https://www.zimihc.nl/content/uploads/2024/08/1988-film-960x540.jpg?x15409",
     "servers": [
@@ -88,7 +43,52 @@
         "url": "https://vidmoly.biz/embed-vnczqm93y5tx.html"
       }
     ],
-    "isPinned": true,
     "createdAt": "2026-05-31T17:24:15.719Z"
+  },
+  {
+    "id": "movie-war-machine",
+    "titleKurdish": "جەنگی جیهانی ٢٠٢٦",
+    "titleEnglish": "War Machine 2026",
+    "description": "لە ئەفغانستاندا، سەرکردەیەکی بێناو دەبێتە پاڵەوانی سەرەکی لە پارێزگاریکردنی خاکەکەی بەرامبەر سوپایەکی گەورە و پیشەیی. ئەم فیلمە تێکەڵەیەکە لە ئاکشن, جوڵە و تاکتیکە مۆدێرنەکانی شەڕ.",
+    "contentType": "movie",
+    "category": "Action",
+    "rating": 6.1,
+    "year": 2026,
+    "duration": "1h 40m",
+    "isFeatured": false,
+    "isPinned": true,
+    "posterUrl": "https://images.unsplash.com/photo-1509347528160-9a9e33742cdb?auto=format&fit=crop&q=80&w=600",
+    "bannerUrl": "https://images.unsplash.com/photo-1542204172-e7052809a86e?auto=format&fit=crop&q=80&w=1200",
+    "servers": [
+      {
+        "id": "server-1",
+        "name": "vidmoly",
+        "url": "https://vidmoly.biz/embed-oixr2w3v2vkp.html"
+      }
+    ],
+    "createdAt": "2026-05-31T17:24:15.720Z"
+  },
+  {
+    "id": "movie-1780349245764-275",
+    "titleKurdish": "جێگۆڕکێ",
+    "titleEnglish": "swapped",
+    "description": "کاتێک ئەم دوو دژمنی سروشتی لەسەر بۆکسێکی سیحری دەستیان دەدات، جووتەکەیان بگۆڕێت، دەبێت فێربن چۆن پێکەوە کار بکەن. نامەی سەرەکی فیلمەکە فێربوون بە ھاوئارەزووی یەکتری و بهایپێنەدانی جیاوازی مێژووییەکانیانە.",
+    "contentType": "movie",
+    "category": "Anime",
+    "rating": 7.0,
+    "year": 2026,
+    "duration": "1h 42m",
+    "isFeatured": true,
+    "isPinned": true,
+    "posterUrl": "https://www.whats-on-netflix.com/wp-content/uploads/covers-2026/swapped.jpeg",
+    "bannerUrl": "https://whentostream.com/wp-content/uploads/2026/04/Swapped-Horizontal-100.jpeg",
+    "servers": [
+      {
+        "id": "serv-1780347937851",
+        "name": "vidmoly",
+        "url": "https://vidmoly.biz/embed-lyhm6x323iai.html"
+      }
+    ],
+    "createdAt": "2026-06-01T21:27:25.783Z"
   }
 ]
