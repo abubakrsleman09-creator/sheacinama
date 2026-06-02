@@ -119,24 +119,31 @@ export default function App() {
             const movieMap = new Map<string, Movie>();
             
             // 1. Add unique server movies first
-            serverMovies.forEach(m => movieMap.set(m.id, m));
+            serverMovies.forEach(m => {
+              if (m && m.id) movieMap.set(m.id, m);
+            });
             
             // 2. Add local movies (which may contain additional user-added movies lost from ephemeral container restart)
             let hasNewMovieToUpload = false;
             localMovies.forEach(m => {
-              if (m && m.id && !movieMap.has(m.id)) {
-                movieMap.set(m.id, m);
-                hasNewMovieToUpload = true;
-                
-                // Proactively restore to the server if the server was reset/rebuilt
-                fetch('/api/movies', {
-                  method: 'POST',
-                  headers: {
-                    'Content-Type': 'application/json',
-                    'x-admin-password': 'ibos-808'
-                  },
-                  body: JSON.stringify(m)
-                }).catch(err => console.error("Auto-sync back error", err));
+              if (m && m.id) {
+                if (!movieMap.has(m.id)) {
+                  movieMap.set(m.id, m);
+                  hasNewMovieToUpload = true;
+                  
+                  // Proactively restore to the server if the server was reset/rebuilt
+                  fetch('/api/movies', {
+                    method: 'POST',
+                    headers: {
+                      'Content-Type': 'application/json',
+                      'x-admin-password': 'ibos-808'
+                    },
+                    body: JSON.stringify(m)
+                  }).catch(err => console.error("Auto-sync back error", err));
+                } else {
+                  // Direct edit check: local update (e.g., image, details) always takes precedence over baseline server values
+                  movieMap.set(m.id, m);
+                }
               }
             });
             
@@ -151,13 +158,8 @@ export default function App() {
                   .then(r => r.json())
                   .then((latest: Movie[]) => {
                     if (Array.isArray(latest)) {
-                      const uniqueLatestMap = new Map<string, Movie>();
-                      latest.forEach(m => {
-                        if (m && m.id) uniqueLatestMap.set(m.id, m);
-                      });
-                      const uniqueLatest = Array.from(uniqueLatestMap.values());
-                      setMovies(uniqueLatest);
-                      safeSaveLocalMovies(uniqueLatest);
+                      setMovies(latest);
+                      safeSaveLocalMovies(latest);
                     }
                   })
                   .catch(err => console.error("Delayed refresh error", err));
@@ -172,7 +174,9 @@ export default function App() {
       // Ensure final absolute unique set
       const finalUniqueMap = new Map<string, Movie>();
       finalMovies.forEach(m => {
-        if (m && m.id) finalUniqueMap.set(m.id, m);
+        if (m && m.id) {
+          finalUniqueMap.set(m.id, m);
+        }
       });
       const absoluteUniqueMovies = Array.from(finalUniqueMap.values());
       
@@ -187,7 +191,17 @@ export default function App() {
         try {
           const parsedLocal = JSON.parse(localMoviesStr);
           if (Array.isArray(parsedLocal)) {
-            fallbackMovies = parsedLocal;
+            const finalFallbackMap = new Map<string, Movie>();
+            
+            // Add custom local user movies
+            parsedLocal.forEach(m => {
+              if (m && m.id) {
+                finalFallbackMap.set(m.id, m);
+              }
+            });
+            
+            fallbackMovies = Array.from(finalFallbackMap.values());
+            fallbackMovies.sort((a, b) => new Date(b.createdAt || '').getTime() - new Date(a.createdAt || '').getTime());
           }
         } catch (e) {
           console.error(e);
@@ -195,7 +209,6 @@ export default function App() {
       }
       
       // If local storage is empty, fallback to the statically bundled list!
-      // This is a life saver for static deploys (e.g., sheacinema.com on static hosting)
       if (fallbackMovies.length === 0) {
         fallbackMovies = staticFallbackMovies as Movie[];
       }

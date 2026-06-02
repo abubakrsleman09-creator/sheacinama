@@ -41,52 +41,49 @@ if (fs.existsSync(LEGACY_DIR)) {
 app.use(express.json({ limit: '50mb' }));
 app.use('/uploads', express.static(UPLOADS_DIR));
 
-// Helper to save base64 image data physically to /uploads/ folder to keep movies.json tiny and clean
+// Helper to save base64 image data physically - MODIFIED: Keep base64 inline to remain portable & robust on static hosts
 function saveBase64Image(dataUrl: string, prefix: string): string {
-  if (!dataUrl || !dataUrl.startsWith('data:image/')) {
-    return dataUrl;
-  }
-  try {
-    const parts = dataUrl.split(';base64,');
-    if (parts.length !== 2) {
-      return dataUrl;
-    }
-    const mime = parts[0]; // e.g., "data:image/png"
-    const base64Data = parts[1].replace(/\s/g, ''); // strip any newlines or spaces
-    const ext = mime.split('/')[1] || 'png';
-    const filename = `${prefix}-${Date.now()}-${Math.floor(Math.random() * 10000)}.${ext}`;
-    const filePath = path.join(UPLOADS_DIR, filename);
-
-    fs.writeFileSync(filePath, Buffer.from(base64Data, 'base64'));
-    return `/uploads/${filename}`;
-  } catch (error) {
-    console.error("Failed to save base64 image physically:", error);
-    return dataUrl;
-  }
+  return dataUrl;
 }
 
-// Convert any existing base64 image strings inside movies.json to static files on server start
+// Convert any existing local upload paths inside movies.json to embedded base64 URLs
 function sanitizeAndConvertBase64Movies() {
   const movies = readJsonFile<Movie[]>(MOVIES_FILE, []);
   let changed = false;
 
-  const updated = movies.map((movie, index) => {
+  const updated = movies.map((movie) => {
     let posterUrl = movie.posterUrl;
     let bannerUrl = movie.bannerUrl;
 
-    if (posterUrl && posterUrl.startsWith('data:image/')) {
-      const newUrl = saveBase64Image(posterUrl, `movie-${movie.id || index}-poster`);
-      if (newUrl !== posterUrl) {
-        posterUrl = newUrl;
-        changed = true;
+    if (posterUrl && posterUrl.startsWith('/uploads/')) {
+      const filename = posterUrl.replace('/uploads/', '');
+      const filePath = path.join(process.cwd(), 'public', 'uploads', filename);
+      if (fs.existsSync(filePath)) {
+        try {
+          const ext = path.extname(filename).replace('.', '') || 'png';
+          const fileData = fs.readFileSync(filePath);
+          posterUrl = `data:image/${ext === 'jpg' ? 'jpeg' : ext};base64,` + fileData.toString('base64');
+          changed = true;
+          console.log(`Successfully inlined poster for "${movie.titleKurdish}" to Base64!`);
+        } catch (err) {
+          console.error(`Failed to inline poster ${filename}:`, err);
+        }
       }
     }
 
-    if (bannerUrl && bannerUrl.startsWith('data:image/')) {
-      const newUrl = saveBase64Image(bannerUrl, `movie-${movie.id || index}-banner`);
-      if (newUrl !== bannerUrl) {
-        bannerUrl = newUrl;
-        changed = true;
+    if (bannerUrl && bannerUrl.startsWith('/uploads/')) {
+      const filename = bannerUrl.replace('/uploads/', '');
+      const filePath = path.join(process.cwd(), 'public', 'uploads', filename);
+      if (fs.existsSync(filePath)) {
+        try {
+          const ext = path.extname(filename).replace('.', '') || 'png';
+          const fileData = fs.readFileSync(filePath);
+          bannerUrl = `data:image/${ext === 'jpg' ? 'jpeg' : ext};base64,` + fileData.toString('base64');
+          changed = true;
+          console.log(`Successfully inlined banner for "${movie.titleKurdish}" to Base64!`);
+        } catch (err) {
+          console.error(`Failed to inline banner ${filename}:`, err);
+        }
       }
     }
 
@@ -98,7 +95,7 @@ function sanitizeAndConvertBase64Movies() {
   });
 
   if (changed) {
-    console.log("Successfully converted base64 images inside movies.json to static /uploads/ files!");
+    console.log("Successfully converted static uploads inside movies.json to embedded Base64 strings!");
     writeJsonFile(MOVIES_FILE, updated);
   }
 }
@@ -139,13 +136,11 @@ const initialMovies: Movie[] = [
     rating: 8.4,
     year: 2019,
     duration: "2h 2m",
-    isFeatured: true,
-    posterUrl: "/uploads/movie-movie-joker-2019-poster-1780414416218-9426.jpeg",
-    bannerUrl: "/uploads/movie-movie-joker-2019-banner-1780414416219-2338.jpeg",
+    isFeatured: false,
+    posterUrl: "https://image.tmdb.org/t/p/w500/udDcl7Pn0j3gOSgzaW6ESclp6bW.jpg",
+    bannerUrl: "https://image.tmdb.org/t/p/original/bS6fX7gMv67041906m9gO06mG99.jpg",
     servers: [
-      { id: "server-1", name: "FASTER-SERVER (VIP)", url: "https://www.youtube.com/embed/zAGVQLH3QPc" },
-      { id: "server-2", name: "OK.RU PLAYER", url: "https://ok.ru/videoembed/2042780355157" },
-      { id: "server-3", name: "SHEA-STREAM (High Speed)", url: "https://vjs.zencdn.net/v/oceans.mp4" }
+      { id: "server-3", name: "vidmoly", url: "https://vidmoly.biz/embed-nxyfw692nlfl.html" }
     ],
     isPinned: true,
     createdAt: new Date().toISOString()
@@ -160,12 +155,11 @@ const initialMovies: Movie[] = [
     rating: 6.9,
     year: 2024,
     duration: "1h 20m",
-    isFeatured: false,
-    posterUrl: "/uploads/movie-movie-1988-kurdish-poster-1780414524493-1647.png",
+    isFeatured: true,
+    posterUrl: "https://www.zimihc.nl/content/uploads/2024/08/1988-film-960x540.jpg?x15409",
     bannerUrl: "https://www.zimihc.nl/content/uploads/2024/08/1988-film-960x540.jpg?x15409",
     servers: [
-      { id: "server-1", name: "SHEA-STREAM 1", url: "https://www.youtube.com/embed/T0Z8vYt2I50" },
-      { id: "server-2", name: "VIP SERVER", url: "https://vjs.zencdn.net/v/oceans.mp4" }
+      { id: "server-1", name: "vidmoly", url: "https://vidmoly.biz/embed-vnczqm93y5tx.html" }
     ],
     isPinned: true,
     createdAt: new Date().toISOString()
@@ -181,13 +175,12 @@ const initialMovies: Movie[] = [
     year: 2026,
     duration: "1h 40m",
     isFeatured: false,
-    posterUrl: "/uploads/movie-movie-war-machine-poster-1780414321363-2782.jpeg",
-    bannerUrl: "/uploads/movie-movie-war-machine-banner-1780414321367-742.png",
+    posterUrl: "https://images.unsplash.com/photo-1509198397868-475647b2a1e5?auto=format&fit=crop&q=80&w=600",
+    bannerUrl: "https://images.unsplash.com/photo-1547483238-f400e65ccd56?auto=format&fit=crop&q=80&w=1200",
     servers: [
-      { id: "server-1", name: "Vidsrc Player", url: "https://vjs.zencdn.net/v/oceans.mp4" },
-      { id: "server-2", name: "Direct Link (HD)", url: "https://vjs.zencdn.net/v/oceans.mp4" }
+      { id: "server-1", name: "vidmoly", url: "https://vidmoly.biz/embed-oixr2w3v2vkp.html" }
     ],
-    isPinned: false,
+    isPinned: true,
     createdAt: new Date().toISOString()
   }
 ];
