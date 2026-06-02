@@ -13,6 +13,52 @@ import { MovieDetailModal } from './components/MovieDetailModal';
 import { RequestMovieModal } from './components/RequestMovieModal';
 import { AdminPanel } from './components/AdminPanel';
 
+// Helper to safely save to localStorage and handle QuotaExceededError or other write failures gracefully
+const safeSaveLocalMovies = (moviesList: Movie[]) => {
+  try {
+    localStorage.setItem('shea_cinema_user_movies', JSON.stringify(moviesList));
+  } catch (error) {
+    console.warn("Storage quota exceeded, trying to save lightweight/cleared movie list", error);
+    try {
+      // Clear massive payloads (base64 string images) to fit inside quota
+      const lightweight = moviesList.map(movie => {
+        let posterUrl = movie.posterUrl;
+        let bannerUrl = movie.bannerUrl;
+        if (posterUrl && posterUrl.startsWith('data:image') && posterUrl.length > 50000) {
+          posterUrl = "https://images.unsplash.com/photo-1489599849927-2ee91cede3ba?auto=format&fit=crop&q=80&w=600";
+        }
+        if (bannerUrl && bannerUrl.startsWith('data:image') && bannerUrl.length > 50000) {
+          bannerUrl = "https://images.unsplash.com/photo-1536440136628-849c177e76a1?auto=format&fit=crop&q=80&w=1200";
+        }
+        return {
+          ...movie,
+          posterUrl,
+          bannerUrl
+        };
+      });
+      localStorage.setItem('shea_cinema_user_movies', JSON.stringify(lightweight));
+    } catch (innerError) {
+      console.error("Failed to save lightweight movies, saving only latest 10", innerError);
+      try {
+        const ultraLight = moviesList.slice(0, 10).map(movie => {
+          let posterUrl = movie.posterUrl;
+          let bannerUrl = movie.bannerUrl;
+          if (posterUrl && posterUrl.startsWith('data:image')) {
+            posterUrl = "https://images.unsplash.com/photo-1489599849927-2ee91cede3ba?auto=format&fit=crop&q=80&w=600";
+          }
+          if (bannerUrl && bannerUrl.startsWith('data:image')) {
+            bannerUrl = "https://images.unsplash.com/photo-1536440136628-849c177e76a1?auto=format&fit=crop&q=80&w=1200";
+          }
+          return { ...movie, posterUrl, bannerUrl };
+        });
+        localStorage.setItem('shea_cinema_user_movies', JSON.stringify(ultraLight));
+      } catch (finalErr) {
+        console.error("Absolutely failed to save to localStorage", finalErr);
+      }
+    }
+  }
+};
+
 export default function App() {
   // DB State
   const [movies, setMovies] = useState<Movie[]>([]);
@@ -38,11 +84,93 @@ export default function App() {
       setIsLoading(true);
       const res = await fetch('/api/movies');
       if (res.ok) {
-        const data = await res.json();
-        setMovies(data);
+        const rawServerMovies = await res.json() as Movie[];
+        
+        // Ensure rawServerMovies itself is unique
+        const serverMovieMap = new Map<string, Movie>();
+        rawServerMovies.forEach(m => {
+          if (m && m.id) serverMovieMap.set(m.id, m);
+        });
+        const serverMovies = Array.from(serverMovieMap.values());
+        
+        // Load from LocalStorage to see if we have newer/custom movies
+        const localMoviesStr = localStorage.getItem('shea_cinema_user_movies');
+        let finalMovies = serverMovies;
+        
+        if (localMoviesStr) {
+          try {
+            const localMovies = JSON.parse(localMoviesStr) as Movie[];
+            const movieMap = new Map<string, Movie>();
+            
+            // 1. Add unique server movies first
+            serverMovies.forEach(m => movieMap.set(m.id, m));
+            
+            // 2. Add local movies (which may contain additional user-added movies lost from ephemeral container restart)
+            let hasNewMovieToUpload = false;
+            localMovies.forEach(m => {
+              if (m && m.id && !movieMap.has(m.id)) {
+                movieMap.set(m.id, m);
+                hasNewMovieToUpload = true;
+                
+                // Proactively restore to the server if the server was reset/rebuilt
+                fetch('/api/movies', {
+                  method: 'POST',
+                  headers: {
+                    'Content-Type': 'application/json',
+                    'x-admin-password': 'ibos-808'
+                  },
+                  body: JSON.stringify(m)
+                }).catch(err => console.error("Auto-sync back error", err));
+              }
+            });
+            
+            finalMovies = Array.from(movieMap.values());
+            // Sort by createdAt descending
+            finalMovies.sort((a, b) => new Date(b.createdAt || '').getTime() - new Date(a.createdAt || '').getTime());
+            
+            // If we restored movies, refresh from the server again after a brief moment
+            if (hasNewMovieToUpload) {
+              setTimeout(() => {
+                fetch('/api/movies')
+                  .then(r => r.json())
+                  .then((latest: Movie[]) => {
+                    const uniqueLatestMap = new Map<string, Movie>();
+                    latest.forEach(m => {
+                      if (m && m.id) uniqueLatestMap.set(m.id, m);
+                    });
+                    const uniqueLatest = Array.from(uniqueLatestMap.values());
+                    setMovies(uniqueLatest);
+                    safeSaveLocalMovies(uniqueLatest);
+                  })
+                  .catch(err => console.error("Delayed refresh error", err));
+              }, 2000);
+            }
+          } catch (e) {
+            console.error(e);
+          }
+        }
+        
+        // Ensure final absolute unique set
+        const finalUniqueMap = new Map<string, Movie>();
+        finalMovies.forEach(m => {
+          if (m && m.id) finalUniqueMap.set(m.id, m);
+        });
+        const absoluteUniqueMovies = Array.from(finalUniqueMap.values());
+        
+        setMovies(absoluteUniqueMovies);
+        safeSaveLocalMovies(absoluteUniqueMovies);
       }
     } catch (err) {
       console.error("Failed loading index movies", err);
+      // Fallback complete to local storage
+      const localMoviesStr = localStorage.getItem('shea_cinema_user_movies');
+      if (localMoviesStr) {
+        try {
+          setMovies(JSON.parse(localMoviesStr));
+        } catch (e) {
+          console.error(e);
+        }
+      }
     } finally {
       setIsLoading(false);
     }
@@ -123,6 +251,17 @@ export default function App() {
         headers: { 'x-admin-password': 'ibos-808' } // Passcode matches backend seed
       });
       if (response.ok) {
+        // Remove from local storage first to sync
+        const localMoviesStr = localStorage.getItem('shea_cinema_user_movies');
+        if (localMoviesStr) {
+          try {
+            const localMovies = JSON.parse(localMoviesStr) as Movie[];
+            const updated = localMovies.filter(m => m.id !== id);
+            safeSaveLocalMovies(updated);
+          } catch (e) {
+            console.error("Local storage delete sync error", e);
+          }
+        }
         fetchMoviesList();
       } else {
         alert("سڕینەوە ئەنجام نەدرا");

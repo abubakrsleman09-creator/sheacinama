@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import {
   Lock, KeyRound, Film, Tv, Plus, Calendar, Clock, Star,
-  Trash2, PlusCircle, CheckCircle2, AlertCircle, RefreshCw, Layers, Send, Check
+  Trash2, PlusCircle, CheckCircle2, AlertCircle, RefreshCw, Layers, Send, Check, Copy, Download
 } from 'lucide-react';
 import { Movie, ContentType, WatchServer, MovieRequest, PlatformStats } from '../types';
 
@@ -19,9 +19,31 @@ export function AdminPanel({ movies, onRefreshMovies, onClosePanel }: AdminPanel
   const [securityError, setSecurityError] = useState('');
 
   // Panel State
-  const [activeTab, setActiveTab] = useState<'catalog' | 'requests' | 'stats'>('catalog');
+  const [activeTab, setActiveTab] = useState<'catalog' | 'requests' | 'stats' | 'json-code'>('catalog');
   const [showForm, setShowForm] = useState(false);
   const [editingMovie, setEditingMovie] = useState<Movie | null>(null);
+  const [hasCopied, setHasCopied] = useState(false);
+
+  const handleCopyJson = () => {
+    const cleanJson = JSON.stringify(movies, null, 2);
+    navigator.clipboard.writeText(cleanJson)
+      .then(() => {
+        setHasCopied(true);
+        setTimeout(() => setHasCopied(false), 2000);
+      })
+      .catch(err => console.error("Could not copy text: ", err));
+  };
+
+  const handleDownloadJson = () => {
+    const fileData = JSON.stringify(movies, null, 2);
+    const blob = new Blob([fileData], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.download = "movies.json";
+    link.href = url;
+    link.click();
+    URL.revokeObjectURL(url);
+  };
 
   // Form Fields
   const [titleKurdish, setTitleKurdish] = useState('');
@@ -46,6 +68,52 @@ export function AdminPanel({ movies, onRefreshMovies, onClosePanel }: AdminPanel
   const [formError, setFormError] = useState('');
   const [formSuccess, setFormSuccess] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isAiLoading, setIsAiLoading] = useState(false);
+
+  const handleAiAutofill = async () => {
+    if (!titleEnglish.trim()) {
+      alert("تکایە سەرەتا ناوی فیلمەکە بە زمانی ئینگلیزی لە خانەکەدا بنووسە، پاشان کلیک بکەرەوە");
+      return;
+    }
+
+    try {
+      setIsAiLoading(true);
+      setFormError('');
+      setFormSuccess('ژیری دەستکرد خەریکی گەڕان و وەرگێڕانە...');
+      const res = await fetch('/api/autofill', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-admin-password': 'ibos-808'
+        },
+        body: JSON.stringify({ title: titleEnglish })
+      });
+
+      if (res.ok) {
+        const data = await res.json();
+        if (data.titleEnglish) setTitleEnglish(data.titleEnglish);
+        if (data.titleKurdish) setTitleKurdish(data.titleKurdish);
+        if (data.description) setStoryline(data.description);
+        if (data.category) setCategory(data.category);
+        if (data.rating) setRating(data.rating.toString());
+        if (data.year) setYear(data.year.toString());
+        if (data.duration) setDuration(data.duration);
+        if (data.posterUrl) setPosterUrl(data.posterUrl);
+        if (data.bannerUrl) setBannerUrl(data.bannerUrl);
+        setFormSuccess("زانیارییەکان بە سەرکەوتوویی لەگەڵ وەرگێڕانی کوردی بە ژیری دەستکرد پڕکرانەوە! ✦");
+      } else {
+        const err = await res.json();
+        setFormError(err.error || "سەرکەوتوو نەبوو لە پڕکردنەوەی ژیری دەستکرد");
+        setFormSuccess('');
+      }
+    } catch (err) {
+      console.error(err);
+      setFormError("نەتوانرا پەیوەندی بە سیستمی ژیری دەستکرد بکرێت");
+      setFormSuccess('');
+    } finally {
+      setIsAiLoading(false);
+    }
+  };
 
   // Categories Dropdown list
   const categoriesList = ['Action', 'Drama', 'Kurdish', 'Comedy', 'Horror', 'Anime', 'Adventure', 'History', 'Sci-Fi'];
@@ -431,6 +499,20 @@ export function AdminPanel({ movies, onRefreshMovies, onClosePanel }: AdminPanel
                   <motion.div layoutId="admTab" className="absolute bottom-0 right-0 left-0 h-0.5 bg-[#FFC80A]" />
                 )}
               </button>
+
+              <button
+                onClick={() => { setActiveTab('json-code'); setShowForm(false); }}
+                className={`py-3.5 px-6 font-bold text-xs md:text-sm transition-all relative ${
+                  activeTab === 'json-code' && !showForm
+                    ? 'text-[#FFC80A]'
+                    : 'text-gray-400 hover:text-white'
+                }`}
+              >
+                کۆپیکردنی کۆدی JSON (سەیڤی ئەبەدی) 💾
+                {activeTab === 'json-code' && !showForm && (
+                  <motion.div layoutId="admTab" className="absolute bottom-0 right-0 left-0 h-0.5 bg-[#FFC80A]" />
+                )}
+              </button>
             </div>
 
             <AnimatePresence mode="wait">
@@ -474,9 +556,28 @@ export function AdminPanel({ movies, onRefreshMovies, onClosePanel }: AdminPanel
                         {/* Title Row */}
                         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                           <div>
-                            <label className="block text-xs text-gray-400 mb-2 font-semibold">
-                              ناوی فیلم (بە ئینگلیزی) *
-                            </label>
+                            <div className="flex items-center justify-between mb-2">
+                              <label className="block text-xs text-gray-400 font-semibold">
+                                ناوی فیلم (بە ئینگلیزی) *
+                              </label>
+                              <button
+                                type="button"
+                                onClick={handleAiAutofill}
+                                disabled={isAiLoading}
+                                className="text-[10px] text-[#FFC80A] bg-[#FFC80A]/10 border border-[#FFC80A]/30 px-2 py-0.5 rounded-md flex items-center gap-1 hover:bg-[#FFC80A]/20 transition-all font-semibold cursor-pointer disabled:opacity-50"
+                              >
+                                {isAiLoading ? (
+                                  <>
+                                    <RefreshCw className="w-2.5 h-2.5 animate-spin text-[#FFC80A]" />
+                                    <span>خەریکی گەڕانە...</span>
+                                  </>
+                                ) : (
+                                  <>
+                                    <span>پڕکردنەوە بە AI ✦</span>
+                                  </>
+                                )}
+                              </button>
+                            </div>
                             <input
                               type="text"
                               required
@@ -909,6 +1010,65 @@ export function AdminPanel({ movies, onRefreshMovies, onClosePanel }: AdminPanel
                           ))}
                         </tbody>
                       </table>
+                    </div>
+                  </div>
+                </motion.div>
+              ) : activeTab === 'json-code' ? (
+                /* RAW JSON CODE COPY AND FILE DOWNLOAD PANEL */
+                <motion.div
+                  key="json-code-panel"
+                  initial={{ opacity: 0, y: 10 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  className="space-y-6 text-right rtl-dir"
+                >
+                  <div className="bg-[#141414] border border-[#222222] rounded-3xl p-6 md:p-8 space-y-4">
+                    <h3 className="text-xl font-extrabold text-[#FFC80A]">پاراستنی فیلمەکان بۆ هەمیشە وەک کۆد 💾</h3>
+                    <p className="text-xs text-gray-300 leading-relaxed">
+                      هەرکاتێک فیلمێکی نوێ زیاد دەکەیت یان دەستکاری سێرڤەر و ناونیشانێک دەکەیت، گۆڕانکارییەکان دەستبەجێ لە سێرڤەرەکەت تۆمار دەبێت و سەیڤ دەبێت. بەڵام بۆ ئەوەی دڵنیابیت کە فیلمەکانت 
+                      <strong> بۆ هەمیشە بە جێگیری دەپارێزرێن</strong> و بە هیچ جۆرە ڕیستبوونێکی کاتی پرۆژەکە لەسەر ئەنتەرنێت ناسڕێنەوە، دەتوانیت بە دوگمەی خوارەوە سەرجەم کۆدی فیلمە نوێیەکانت بە یەک کلیک کۆپی بکەیت و بیخەیتە نێو کۆدی پڕۆژەکەتەوە.
+                    </p>
+
+                    <div className="flex flex-wrap items-center gap-3 pt-2">
+                      <button
+                        onClick={handleCopyJson}
+                        className="bg-[#FFC80A] hover:bg-[#E2B200] text-black font-extrabold text-xs px-5 py-3 rounded-xl transition flex items-center gap-2 shadow-lg shadow-[#FFC80A]/10 cursor-pointer"
+                      >
+                        {hasCopied ? (
+                          <>
+                            <CheckCircle2 className="w-4 h-4 text-black stroke-3" />
+                            <span>کۆپی کرا! ✓</span>
+                          </>
+                        ) : (
+                          <>
+                            <Copy className="w-4 h-4 text-black" />
+                            <span>کۆپی کردنی تەواوی کۆدەکە (Copy JSON)</span>
+                          </>
+                        )}
+                      </button>
+
+                      <button
+                        onClick={handleDownloadJson}
+                        className="bg-[#1c1c1c] hover:bg-[#252525] border border-[#222222] text-white font-bold text-xs px-5 py-3 rounded-xl transition flex items-center gap-2 cursor-pointer"
+                      >
+                        <Download className="w-4 h-4 text-gray-300" />
+                        <span>دابەزاندنی فایلی movies.json</span>
+                      </button>
+                    </div>
+
+                    <div className="bg-[#FFC80A]/10 border border-[#FFC80A]/30 p-4 rounded-2xl text-xs text-[#FFC80A] leading-relaxed font-semibold">
+                      💡 ڕێنمایی جێگیرکردنی کۆد لەناو فایلی سەرەکی:
+                      <ol className="list-decimal list-inside mt-2 space-y-1 text-gray-300 font-normal">
+                        <li>لێرە کلیک لەسەر دوگمەی زەردی <strong>(کۆپی کردنی تەواوی کۆدەکە)</strong> بکە.</li>
+                        <li>پاشان لە بەڕێوبەری کۆی فۆڵدەرەکانی سەرەوە، فایلی <code className="bg-black/40 px-1 py-0.5 rounded font-mono text-white text-[10px]">/movies.json</code> بکەرەوە.</li>
+                        <li>هەموو کۆدە کۆنەکانی ناو فایلی movies.json بسڕەوە و ئەم کۆدە نوێیەی تێدا بەپێست بکە (Paste) و پاشەکەوتی بکە. بەم شێوەیە پۆستەکانت بۆ هەمیشە وەک بەشێکی بنەڕەتی لەگەڵ پاڵەکەتەکانت جێگیر دەبن!</li>
+                      </ol>
+                    </div>
+
+                    <div className="space-y-2 text-left">
+                      <label className="block text-xs text-gray-400 font-bold text-right mb-1">پیشاندانی کۆدی کەتەلۆگ بۆ کۆپیکردنی دەستی:</label>
+                      <pre className="bg-black/50 border border-[#222222] rounded-2xl p-4 text-[10px] font-mono text-amber-100/90 overflow-x-auto max-h-96 text-left ltr-dir">
+                        {JSON.stringify(movies, null, 2)}
+                      </pre>
                     </div>
                   </div>
                 </motion.div>
