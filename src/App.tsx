@@ -140,6 +140,9 @@ export default function App() {
                     },
                     body: JSON.stringify(m)
                   }).catch(err => console.error("Auto-sync back error", err));
+                } else {
+                  // Direct edit check: local update (e.g., image, details) always takes precedence over baseline server values
+                  movieMap.set(m.id, m);
                 }
               }
             });

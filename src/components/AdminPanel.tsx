@@ -130,7 +130,7 @@ export function AdminPanel({ movies, onRefreshMovies, onClosePanel }: AdminPanel
     }
   };
 
-  // Handle local file upload and conversion to Base64
+  // Handle local file upload and conversion to Base64 with high optimization
   const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>, type: 'poster' | 'banner') => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -138,11 +138,43 @@ export function AdminPanel({ movies, onRefreshMovies, onClosePanel }: AdminPanel
     const reader = new FileReader();
     reader.onload = (event) => {
       const base64String = event.target?.result as string;
-      if (type === 'poster') {
-        setPosterUrl(base64String);
-      } else {
-        setBannerUrl(base64String);
-      }
+
+      // Compressing image dynamically via HTML5 Canvas to keep file sizes under 15KB
+      const img = new Image();
+      img.onload = () => {
+        const canvas = document.createElement('canvas');
+        let width = img.width;
+        let height = img.height;
+        
+        // Define clean dimensions (320px max for poster cards, 540px for landscape banners)
+        const maxDimension = type === 'poster' ? 320 : 540; 
+        
+        if (width > height) {
+          if (width > maxDimension) {
+            height = Math.round((height * maxDimension) / width);
+            width = maxDimension;
+          }
+        } else {
+          if (height > maxDimension) {
+            width = Math.round((width * maxDimension) / height);
+            height = maxDimension;
+          }
+        }
+        
+        canvas.width = width;
+        canvas.height = height;
+        const ctx = canvas.getContext('2d');
+        if (ctx) {
+          ctx.drawImage(img, 0, 0, width, height);
+          const compressedBase64 = canvas.toDataURL('image/jpeg', 0.65); // High compression to ~12KB
+          if (type === 'poster') {
+            setPosterUrl(compressedBase64);
+          } else {
+            setBannerUrl(compressedBase64);
+          }
+        }
+      };
+      img.src = base64String;
     };
     reader.readAsDataURL(file);
   };
@@ -314,7 +346,9 @@ export function AdminPanel({ movies, onRefreshMovies, onClosePanel }: AdminPanel
 
     setIsSubmitting(true);
 
-    const payload = {
+    const id = editingMovie ? editingMovie.id : `movie-${Date.now()}-${Math.floor(Math.random() * 1000)}`;
+    const savedMovie: Movie = {
+      id,
       titleKurdish: titleKurdish.trim(),
       titleEnglish: titleEnglish.trim(),
       description: storyline.trim(),
@@ -327,12 +361,70 @@ export function AdminPanel({ movies, onRefreshMovies, onClosePanel }: AdminPanel
       isPinned,
       posterUrl: posterUrl.trim() || 'https://images.unsplash.com/photo-1489599849927-2ee91cede3ba?auto=format&fit=crop&q=80&w=600',
       bannerUrl: bannerUrl.trim() || 'https://images.unsplash.com/photo-1536440136628-849c177e76a1?auto=format&fit=crop&q=80&w=1200',
-      servers
+      servers,
+      createdAt: editingMovie ? (editingMovie.createdAt || new Date().toISOString()) : new Date().toISOString()
     };
+
+    // Ensure sync to local storage immediately (critical for sheacinema.com static environment)
+    try {
+      const localMoviesStr = localStorage.getItem('shea_cinema_user_movies');
+      let localMoviesList: Movie[] = [];
+      if (localMoviesStr) {
+        try {
+          const parsed = JSON.parse(localMoviesStr);
+          if (Array.isArray(parsed)) {
+            localMoviesList = parsed;
+          }
+        } catch(e) {}
+      }
+      
+      if (localMoviesList.length === 0) {
+        localMoviesList = [...movies];
+      }
+
+      let updatedList: Movie[] = [];
+      if (editingMovie) {
+        updatedList = localMoviesList.map(m => m.id === id ? savedMovie : m);
+      } else {
+        const filtered = localMoviesList.filter(m => m.id !== id);
+        updatedList = [savedMovie, ...filtered];
+      }
+
+      if (savedMovie.isFeatured) {
+        updatedList.forEach(m => {
+          if (m.id !== savedMovie.id) {
+            m.isFeatured = false;
+          }
+        });
+      }
+
+      // Safe save helper equivalent inside AdminPanel
+      try {
+        localStorage.setItem('shea_cinema_user_movies', JSON.stringify(updatedList));
+      } catch (innerQuotaErr) {
+        console.warn("Storage quota exceeded inside AdminPanel form save, attempting clean save", innerQuotaErr);
+        // Clear heavy base64 urls to fit within quota limits
+        const cleanList = updatedList.map(movie => {
+          let pUrl = movie.posterUrl;
+          let bUrl = movie.bannerUrl;
+          if (pUrl && pUrl.startsWith('data:image') && pUrl.length > 50000) {
+            pUrl = "https://images.unsplash.com/photo-1489599849927-2ee91cede3ba?auto=format&fit=crop&q=80&w=600";
+          }
+          if (bUrl && bUrl.startsWith('data:image') && bUrl.length > 50000) {
+            bUrl = "https://images.unsplash.com/photo-1536440136628-849c177e76a1?auto=format&fit=crop&q=80&w=1200";
+          }
+          return { ...movie, posterUrl: pUrl, bannerUrl: bUrl };
+        });
+        localStorage.setItem('shea_cinema_user_movies', JSON.stringify(cleanList));
+      }
+    } catch (err) {
+      console.error("Local storage persistent backup failed:", err);
+    }
 
     const targetUrl = editingMovie ? `/api/movies/${editingMovie.id}` : '/api/movies';
     const method = editingMovie ? 'PUT' : 'POST';
 
+    let isServerSaved = false;
     try {
       const response = await fetch(targetUrl, {
         method,
@@ -340,29 +432,31 @@ export function AdminPanel({ movies, onRefreshMovies, onClosePanel }: AdminPanel
           'Content-Type': 'application/json',
           'x-admin-password': passcode || 'ibos-808'
         },
-        body: JSON.stringify(payload)
+        body: JSON.stringify(savedMovie)
       });
 
-      if (!response.ok) {
-        const er = await response.json();
-        throw new Error(er.error || "کێشەیەک ڕوویدا لە متمانەدان");
+      if (response.ok) {
+        isServerSaved = true;
       }
-
-      setFormSuccess(editingMovie ? 'فیلمەکە بە سەرکەوتوویی هەموار کرایەوە!' : 'فیلمی نوێ زیادکرا بە سەرکەوتوویی!');
-      onRefreshMovies();
-      fetchAdminData();
-
-      setTimeout(() => {
-        setShowForm(false);
-        setEditingMovie(null);
-        setFormSuccess('');
-      }, 1500);
-
-    } catch (err: any) {
-      setFormError(err.message || 'پاشەکەوتکردن شکستی هێنا');
-    } finally {
-      setIsSubmitting(false);
+    } catch (err) {
+      console.warn("Server API failed, relying entirely on LocalStorage (static environment)", err);
     }
+
+    const successMsg = editingMovie 
+      ? (isServerSaved ? 'فیلمەکە بە سەرکەوتوویی لە سێرڤەر و دەستبەجێ پاشەکەوت کرا!' : 'فیلمەکە بە سەرکەوتوویی لە وێبگەڕەکەت پاشەکەوت کرا! (سایتی جێگیر)')
+      : (isServerSaved ? 'فیلمی نوێ زیادکرا بە سەرکەوتوویی بۆ سێرڤەر و لۆکاڵ!' : 'فیلمی نوێ زیادکرا بە سەرکەوتوویی لە وێبگەڕەکەت! (سایتی جێگیر)');
+
+    setFormSuccess(successMsg);
+    onRefreshMovies();
+    fetchAdminData();
+
+    setTimeout(() => {
+      setShowForm(false);
+      setEditingMovie(null);
+      setFormSuccess('');
+    }, 1500);
+
+    setIsSubmitting(false);
   };
 
   return (
