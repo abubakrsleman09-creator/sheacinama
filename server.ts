@@ -9,11 +9,33 @@ const app = express();
 const PORT = 3000;
 const MOVIES_FILE = path.join(process.cwd(), 'movies.json');
 const REQUESTS_FILE = path.join(process.cwd(), 'movie_requests.json');
-const UPLOADS_DIR = path.join(process.cwd(), 'uploads');
+const UPLOADS_DIR = path.join(process.cwd(), 'public', 'uploads');
+const LEGACY_DIR = path.join(process.cwd(), 'uploads');
 
-// Ensure uploads folder exists
+// Ensure public uploads folder exists
 if (!fs.existsSync(UPLOADS_DIR)) {
   fs.mkdirSync(UPLOADS_DIR, { recursive: true });
+}
+
+// Migrate legacy uploaded files to public folder to support static compilation bundle
+if (fs.existsSync(LEGACY_DIR)) {
+  try {
+    const files = fs.readdirSync(LEGACY_DIR);
+    for (const file of files) {
+      const srcPath = path.join(LEGACY_DIR, file);
+      const destPath = path.join(UPLOADS_DIR, file);
+      if (fs.lstatSync(srcPath).isFile()) {
+        try {
+          fs.copyFileSync(srcPath, destPath);
+        } catch (copyErr) {
+          console.error(`Error copying ${file} to public uploads:`, copyErr);
+        }
+      }
+    }
+    console.log("Successfully migrated files from legacy uploads to public/uploads!");
+  } catch (err) {
+    console.error("Failed legacy uploads migration:", err);
+  }
 }
 
 app.use(express.json({ limit: '50mb' }));
@@ -118,8 +140,8 @@ const initialMovies: Movie[] = [
     year: 2019,
     duration: "2h 2m",
     isFeatured: true,
-    posterUrl: "https://images.unsplash.com/photo-1559583985-c80d8ad9b29f?auto=format&fit=crop&q=80&w=600",
-    bannerUrl: "https://images.unsplash.com/photo-1536440136628-849c177e76a1?auto=format&fit=crop&q=80&w=1200",
+    posterUrl: "/uploads/movie-movie-joker-2019-poster-1780414416218-9426.jpeg",
+    bannerUrl: "/uploads/movie-movie-joker-2019-banner-1780414416219-2338.jpeg",
     servers: [
       { id: "server-1", name: "FASTER-SERVER (VIP)", url: "https://www.youtube.com/embed/zAGVQLH3QPc" },
       { id: "server-2", name: "OK.RU PLAYER", url: "https://ok.ru/videoembed/2042780355157" },
@@ -139,8 +161,8 @@ const initialMovies: Movie[] = [
     year: 2024,
     duration: "1h 20m",
     isFeatured: false,
-    posterUrl: "https://images.unsplash.com/photo-1543536448-d209d2d13a1c?auto=format&fit=crop&q=80&w=600",
-    bannerUrl: "https://images.unsplash.com/photo-1489599849927-2ee91cede3ba?auto=format&fit=crop&q=80&w=1200",
+    posterUrl: "/uploads/movie-movie-1988-kurdish-poster-1780414524493-1647.png",
+    bannerUrl: "https://www.zimihc.nl/content/uploads/2024/08/1988-film-960x540.jpg?x15409",
     servers: [
       { id: "server-1", name: "SHEA-STREAM 1", url: "https://www.youtube.com/embed/T0Z8vYt2I50" },
       { id: "server-2", name: "VIP SERVER", url: "https://vjs.zencdn.net/v/oceans.mp4" }
@@ -159,8 +181,8 @@ const initialMovies: Movie[] = [
     year: 2026,
     duration: "1h 40m",
     isFeatured: false,
-    posterUrl: "https://images.unsplash.com/photo-1509198397868-475647b2a1e5?auto=format&fit=crop&q=80&w=600",
-    bannerUrl: "https://images.unsplash.com/photo-1509198397868-475647b2a1e5?auto=format&fit=crop&q=80&w=1200",
+    posterUrl: "/uploads/movie-movie-war-machine-poster-1780414321363-2782.jpeg",
+    bannerUrl: "/uploads/movie-movie-war-machine-banner-1780414321367-742.png",
     servers: [
       { id: "server-1", name: "Vidsrc Player", url: "https://vjs.zencdn.net/v/oceans.mp4" },
       { id: "server-2", name: "Direct Link (HD)", url: "https://vjs.zencdn.net/v/oceans.mp4" }
