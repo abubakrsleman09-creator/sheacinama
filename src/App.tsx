@@ -283,35 +283,59 @@ export default function App() {
   // Admin capabilities (directly triggers from unlocked state on main grids)
   const handleDeleteMovie = async (id: string) => {
     if (!window.confirm("دڵنیای لە سڕینەوەی ئەم بابەتە؟")) return;
-    try {
-      const response = await fetch(`/api/movies/${id}`, {
-        method: 'DELETE',
-        headers: { 'x-admin-password': 'ibos-808' } // Passcode matches backend seed
-      });
-      if (response.ok) {
-        // Remove from local storage first to sync
-        const localMoviesStr = localStorage.getItem('shea_cinema_user_movies');
-        if (localMoviesStr) {
-          try {
-            const localMovies = JSON.parse(localMoviesStr) as Movie[];
-            const updated = localMovies.filter(m => m.id !== id);
-            safeSaveLocalMovies(updated);
-          } catch (e) {
-            console.error("Local storage delete sync error", e);
-          }
+    
+    // 1. Remove from local storage first to sync immediately
+    const localMoviesStr = localStorage.getItem('shea_cinema_user_movies');
+    let localList = [...movies];
+    if (localMoviesStr) {
+      try {
+        const parsed = JSON.parse(localMoviesStr);
+        if (Array.isArray(parsed)) {
+          localList = parsed;
         }
-        fetchMoviesList();
-      } else {
-        alert("سڕینەوە ئەنجام نەدرا");
+      } catch (e) {
+        console.error(e);
       }
+    }
+    const updated = localList.filter(m => m.id !== id);
+    safeSaveLocalMovies(updated);
+    
+    // Update live state immediately
+    setMovies(updated);
+
+    // 2. Safely call server delete API (fire and forget / gracefully catch offline static environments)
+    try {
+      await fetch(`/api/movies/${id}`, {
+        method: 'DELETE',
+        headers: { 'x-admin-password': 'ibos-808' }
+      });
     } catch (err) {
-      console.error(err);
+      console.warn("Server delete bypassed/failed (static mode)", err);
     }
   };
 
   const handleTogglePinMovie = async (movie: Movie) => {
+    // 1. Toggle pin on local storage and live state immediately
+    const localMoviesStr = localStorage.getItem('shea_cinema_user_movies');
+    let localList = [...movies];
+    if (localMoviesStr) {
+      try {
+        const parsed = JSON.parse(localMoviesStr);
+        if (Array.isArray(parsed)) {
+          localList = parsed;
+        }
+      } catch (e) {
+        console.error(e);
+      }
+    }
+    
+    const updated = localList.map(m => m.id === movie.id ? { ...m, isPinned: !m.isPinned } : m);
+    safeSaveLocalMovies(updated);
+    setMovies(updated);
+
+    // 2. Safely call server PUT API
     try {
-      const response = await fetch(`/api/movies/${movie.id}`, {
+      await fetch(`/api/movies/${movie.id}`, {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
@@ -319,11 +343,8 @@ export default function App() {
         },
         body: JSON.stringify({ isPinned: !movie.isPinned })
       });
-      if (response.ok) {
-        fetchMoviesList();
-      }
     } catch (err) {
-      console.error(err);
+      console.warn("Server pin-toggle bypassed/failed (static mode)", err);
     }
   };
 
