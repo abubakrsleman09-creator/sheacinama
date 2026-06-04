@@ -8,6 +8,9 @@ import { Movie } from './types';
 // Static fallback movies directly from movies.json
 import staticFallbackMovies from '../movies.json';
 
+// Excluded default pre-packaged movie IDs that the user wants to remove completely
+const EXCLUDED_DEFAULT_IDS = ["movie-joker-2019", "movie-1988-kurdish", "movie-war-machine", "movie-1780349245764-275"];
+
 // Components
 import { Header } from './components/Header';
 import { FeaturedBanner } from './components/FeaturedBanner';
@@ -46,10 +49,10 @@ const safeSaveLocalMovies = (moviesList: Movie[]) => {
         const ultraLight = moviesList.slice(0, 10).map(movie => {
           let posterUrl = movie.posterUrl;
           let bannerUrl = movie.bannerUrl;
-          if (posterUrl && posterUrl.startsWith('data:image')) {
+          if (posterUrl && posterUrl.startsWith('data:image') && posterUrl.length > 50000) {
             posterUrl = "https://images.unsplash.com/photo-1489599849927-2ee91cede3ba?auto=format&fit=crop&q=80&w=600";
           }
-          if (bannerUrl && bannerUrl.startsWith('data:image')) {
+          if (bannerUrl && bannerUrl.startsWith('data:image') && bannerUrl.length > 50000) {
             bannerUrl = "https://images.unsplash.com/photo-1536440136628-849c177e76a1?auto=format&fit=crop&q=80&w=1200";
           }
           return { ...movie, posterUrl, bannerUrl };
@@ -98,14 +101,14 @@ export default function App() {
       // Ensure rawServerMovies itself is unique
       const serverMovieMap = new Map<string, Movie>();
       rawServerMovies.forEach(m => {
-        if (m && m.id) serverMovieMap.set(m.id, m);
+        if (m && m.id && !EXCLUDED_DEFAULT_IDS.includes(m.id)) serverMovieMap.set(m.id, m);
       });
       let serverMovies = Array.from(serverMovieMap.values());
 
       // If the server list is completely empty, populate with statically imported movies!
       // This protects against server storage resets, database wipes, and early stages.
       if (serverMovies.length === 0) {
-        serverMovies = staticFallbackMovies as Movie[];
+        serverMovies = (staticFallbackMovies as Movie[]).filter(m => m && m.id && !EXCLUDED_DEFAULT_IDS.includes(m.id));
       }
       
       // Load from LocalStorage to see if we have newer/custom movies
@@ -114,19 +117,19 @@ export default function App() {
       
       if (localMoviesStr) {
         try {
-          const localMovies = JSON.parse(localMoviesStr);
+          const localMovies = (JSON.parse(localMoviesStr) as Movie[]).filter(m => m && m.id && !EXCLUDED_DEFAULT_IDS.includes(m.id));
           if (Array.isArray(localMovies)) {
             const movieMap = new Map<string, Movie>();
             
             // 1. Add unique server movies first
             serverMovies.forEach(m => {
-              if (m && m.id) movieMap.set(m.id, m);
+              if (m && m.id && !EXCLUDED_DEFAULT_IDS.includes(m.id)) movieMap.set(m.id, m);
             });
             
             // 2. Add local movies (which may contain additional user-added movies lost from ephemeral container restart)
             let hasNewMovieToUpload = false;
             localMovies.forEach(m => {
-              if (m && m.id) {
+              if (m && m.id && !EXCLUDED_DEFAULT_IDS.includes(m.id)) {
                 if (!movieMap.has(m.id)) {
                   movieMap.set(m.id, m);
                   hasNewMovieToUpload = true;
@@ -140,9 +143,6 @@ export default function App() {
                     },
                     body: JSON.stringify(m)
                   }).catch(err => console.error("Auto-sync back error", err));
-                } else {
-                  // Direct edit check: local update (e.g., image, details) always takes precedence over baseline server values
-                  movieMap.set(m.id, m);
                 }
               }
             });
@@ -158,8 +158,9 @@ export default function App() {
                   .then(r => r.json())
                   .then((latest: Movie[]) => {
                     if (Array.isArray(latest)) {
-                      setMovies(latest);
-                      safeSaveLocalMovies(latest);
+                      const filteredLatest = latest.filter(m => m && m.id && !EXCLUDED_DEFAULT_IDS.includes(m.id));
+                      setMovies(filteredLatest);
+                      safeSaveLocalMovies(filteredLatest);
                     }
                   })
                   .catch(err => console.error("Delayed refresh error", err));
@@ -174,7 +175,7 @@ export default function App() {
       // Ensure final absolute unique set
       const finalUniqueMap = new Map<string, Movie>();
       finalMovies.forEach(m => {
-        if (m && m.id) {
+        if (m && m.id && !EXCLUDED_DEFAULT_IDS.includes(m.id)) {
           finalUniqueMap.set(m.id, m);
         }
       });
@@ -189,13 +190,13 @@ export default function App() {
       let fallbackMovies: Movie[] = [];
       if (localMoviesStr) {
         try {
-          const parsedLocal = JSON.parse(localMoviesStr);
+          const parsedLocal = (JSON.parse(localMoviesStr) as Movie[]).filter(m => m && m.id && !EXCLUDED_DEFAULT_IDS.includes(m.id));
           if (Array.isArray(parsedLocal)) {
             const finalFallbackMap = new Map<string, Movie>();
             
             // Add custom local user movies
             parsedLocal.forEach(m => {
-              if (m && m.id) {
+              if (m && m.id && !EXCLUDED_DEFAULT_IDS.includes(m.id)) {
                 finalFallbackMap.set(m.id, m);
               }
             });
@@ -210,7 +211,7 @@ export default function App() {
       
       // If local storage is empty, fallback to the statically bundled list!
       if (fallbackMovies.length === 0) {
-        fallbackMovies = staticFallbackMovies as Movie[];
+        fallbackMovies = (staticFallbackMovies as Movie[]).filter(m => m && m.id && !EXCLUDED_DEFAULT_IDS.includes(m.id));
       }
       setMovies(fallbackMovies);
     } finally {

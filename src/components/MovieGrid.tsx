@@ -1,5 +1,5 @@
 import { motion } from 'motion/react';
-import { Star, Clock, Trash2, Edit, Award } from 'lucide-react';
+import { Star, Clock, Trash2, Edit, Award, Film } from 'lucide-react';
 import { Movie } from '../types';
 
 interface MovieGridProps {
@@ -47,12 +47,21 @@ export function MovieGrid({
         >
           {/* Post Image Container */}
           <div className="relative aspect-[2/3] w-full overflow-hidden bg-[#0f0f0f] cursor-pointer" onClick={() => onSelectMovie(movie)}>
-            <img
-              src={movie.posterUrl}
-              alt={movie.titleKurdish}
-              referrerPolicy="no-referrer"
-              className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
-            />
+            {movie.posterUrl ? (
+              <img
+                src={movie.posterUrl}
+                alt={movie.titleKurdish}
+                referrerPolicy="no-referrer"
+                className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
+              />
+            ) : (
+              <div className="w-full h-full flex flex-col items-center justify-center p-4 bg-gradient-to-br from-[#1c1c1c] via-[#0f0f0f] to-black text-center relative pointer-events-none">
+                <Film className="w-10 h-10 text-yellow-500/20 mb-3" />
+                <span className="font-bold text-xs text-yellow-500/80 px-1 leading-snug line-clamp-3">{movie.titleKurdish}</span>
+                <span className="text-[9px] text-gray-500 mt-1 truncate max-w-full px-2">{movie.titleEnglish}</span>
+                <span className="absolute bottom-2 text-[8px] text-gray-700 select-none">SHEA CINEMA</span>
+              </div>
+            )}
 
             {/* Gradient Overlay */}
             <div className="absolute inset-0 bg-gradient-to-t from-[#1a1a1a] via-transparent to-black/30 pointer-events-none" />

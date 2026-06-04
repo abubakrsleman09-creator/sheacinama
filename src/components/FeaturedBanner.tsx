@@ -32,17 +32,27 @@ export function FeaturedBanner({
       {/* Background Banner Image with Responsive Cover - Animated Crossfade */}
       <div className="absolute inset-0 w-full h-full overflow-hidden">
         <AnimatePresence mode="popLayout">
-          <motion.img
-            key={movie.id}
-            src={movie.bannerUrl || movie.posterUrl}
-            alt={movie.titleKurdish}
-            referrerPolicy="no-referrer"
-            initial={{ opacity: 0, scale: 1.05 }}
-            animate={{ opacity: 1, scale: 1 }}
-            exit={{ opacity: 0 }}
-            transition={{ duration: 0.8, ease: "easeOut" }}
-            className="absolute inset-0 w-full h-full object-cover object-center brightness-[0.35]"
-          />
+          {(movie.bannerUrl || movie.posterUrl) ? (
+            <motion.img
+              key={movie.id}
+              src={movie.bannerUrl || movie.posterUrl}
+              alt={movie.titleKurdish}
+              referrerPolicy="no-referrer"
+              initial={{ opacity: 0, scale: 1.05 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0 }}
+              transition={{ duration: 0.8, ease: "easeOut" }}
+              className="absolute inset-0 w-full h-full object-cover object-center brightness-[0.35]"
+            />
+          ) : (
+            <motion.div
+              key={`fallback-${movie.id}`}
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              className="absolute inset-0 w-full h-full bg-gradient-to-br from-[#1f1e1a] via-[#0f0f0f] to-black opacity-80"
+            />
+          )}
         </AnimatePresence>
       </div>
 

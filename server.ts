@@ -48,7 +48,9 @@ function saveBase64Image(dataUrl: string, prefix: string): string {
 
 // Convert any existing local upload paths inside movies.json to embedded base64 URLs
 function sanitizeAndConvertBase64Movies() {
+  console.log("Starting sanitizeAndConvertBase64Movies configuration check...");
   const movies = readJsonFile<Movie[]>(MOVIES_FILE, []);
+  console.log(`Loaded ${movies.length} movies for image sanity checks.`);
   let changed = false;
 
   const updated = movies.map((movie) => {
@@ -58,11 +60,12 @@ function sanitizeAndConvertBase64Movies() {
     if (posterUrl && posterUrl.startsWith('/uploads/')) {
       const filename = posterUrl.replace('/uploads/', '');
       const filePath = path.join(process.cwd(), 'public', 'uploads', filename);
+      console.log(`Checking poster file path: ${filePath} (Exists: ${fs.existsSync(filePath)})`);
       if (fs.existsSync(filePath)) {
         try {
           const ext = path.extname(filename).replace('.', '') || 'png';
           const fileData = fs.readFileSync(filePath);
-          posterUrl = `data:image/${ext === 'jpg' ? 'jpeg' : ext};base64,` + fileData.toString('base64');
+          posterUrl = `data:image/${ext === 'jpeg' || ext === 'jpg' ? 'jpeg' : ext};base64,` + fileData.toString('base64');
           changed = true;
           console.log(`Successfully inlined poster for "${movie.titleKurdish}" to Base64!`);
         } catch (err) {
@@ -74,11 +77,12 @@ function sanitizeAndConvertBase64Movies() {
     if (bannerUrl && bannerUrl.startsWith('/uploads/')) {
       const filename = bannerUrl.replace('/uploads/', '');
       const filePath = path.join(process.cwd(), 'public', 'uploads', filename);
+      console.log(`Checking banner file path: ${filePath} (Exists: ${fs.existsSync(filePath)})`);
       if (fs.existsSync(filePath)) {
         try {
           const ext = path.extname(filename).replace('.', '') || 'png';
           const fileData = fs.readFileSync(filePath);
-          bannerUrl = `data:image/${ext === 'jpg' ? 'jpeg' : ext};base64,` + fileData.toString('base64');
+          bannerUrl = `data:image/${ext === 'jpeg' || ext === 'jpg' ? 'jpeg' : ext};base64,` + fileData.toString('base64');
           changed = true;
           console.log(`Successfully inlined banner for "${movie.titleKurdish}" to Base64!`);
         } catch (err) {
@@ -97,6 +101,8 @@ function sanitizeAndConvertBase64Movies() {
   if (changed) {
     console.log("Successfully converted static uploads inside movies.json to embedded Base64 strings!");
     writeJsonFile(MOVIES_FILE, updated);
+  } else {
+    console.log("No layout elements needed conversion to Base64.");
   }
 }
 
