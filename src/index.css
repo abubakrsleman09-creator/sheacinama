@@ -1,0 +1,45 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Noto+Sans+Arabic:wght@300;400;500;600;700;800&family=Space+Grotesk:wght@400;500;600;700&display=swap');
+@import "tailwindcss";
+
+@theme {
+  --font-sans: "Noto Sans Arabic", "Inter", system-ui, -apple-system, sans-serif;
+  --font-display: "Space Grotesk", sans-serif;
+  --font-mono: ui-monospace, monospace;
+}
+
+/* Custom Scrollbar for modern cinema look */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: #0d0d0d;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #27272a;
+  border-radius: 3px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #eab308;
+}
+
+/* Custom overlay styles */
+.text-glow {
+  text-shadow: 0 0 10px rgba(234, 179, 8, 0.3);
+}
+
+.box-glow {
+  box-shadow: 0 4px 20px -2px rgba(234, 179, 8, 0.15);
+}
+
+/* Direction management */
+.rtl-dir {
+  direction: rtl;
+}
+
+.ltr-dir {
+  direction: ltr;
+}
