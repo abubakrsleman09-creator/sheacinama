@@ -1,0 +1,33 @@
+{
+  "entities": {
+    "Movie": {
+      "title": "Movie",
+      "description": "Represents a movie or TV show with multiple video streaming servers",
+      "type": "object",
+      "properties": {
+        "title": { "type": "string", "description": "The title of the movie" },
+        "description": { "type": "string", "description": "Brief summary or description of the movie" },
+        "year": { "type": "string", "description": "The release year of the movie" },
+        "category": { "type": "string", "description": "Category: Movie, Series, Anime, etc." },
+        "genre": { "type": "string", "description": "Genre tags of the movie" },
+        "rating": { "type": "string", "description": "IMDb rating or viewer rating" },
+        "posterUrl": { "type": "string", "description": "The URL of the movie poster image" },
+        "bannerUrl": { "type": "string", "description": "An optional banner image URL for the movie detail page header" },
+        "servers": {
+          "type": "array",
+          "description": "List of video hosting/streaming servers"
+        },
+        "isTrending": { "type": "boolean", "description": "Flag to mark the movie as trending" },
+        "createdAt": { "type": "string", "format": "date-time", "description": "Database insertion timestamp" },
+        "updatedAt": { "type": "string", "format": "date-time", "description": "Database modification timestamp" }
+      },
+      "required": ["title", "category", "posterUrl"]
+    }
+  },
+  "firestore": {
+    "/movies/{movieId}": {
+      "schema": "Movie",
+      "description": "The movies and series collection managed by the site admin"
+    }
+  }
+}

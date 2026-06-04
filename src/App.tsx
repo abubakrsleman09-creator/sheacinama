@@ -1,690 +1,456 @@
-import { useState, useEffect } from 'react';
-import { motion, AnimatePresence } from 'motion/react';
-import { Film, Award, Send, Volume2, Shield, Flame, Activity } from 'lucide-react';
+import React, { useState, useEffect } from "react";
+import { onAuthStateChanged, User as FirebaseUser } from "firebase/auth";
+import { collection, query, orderBy, onSnapshot } from "firebase/firestore";
+import { auth, signInWithPopup, signOut, googleProvider, db } from "./firebase";
+import { Movie } from "./types";
+import { handleFirestoreError, OperationType } from "./firestoreErrorHandler";
 
-// Types
-import { Movie } from './types';
+// Import custom sections
+import Navbar from "./components/Navbar";
+import MovieCard from "./components/MovieCard";
+import MovieDetail from "./components/MovieDetail";
+import AdminPanel from "./components/AdminPanel";
 
-// Static fallback movies directly from movies.json
-import staticFallbackMovies from '../movies.json';
-
-// Excluded default pre-packaged movie IDs that the user wants to remove completely
-const EXCLUDED_DEFAULT_IDS = ["movie-joker-2019", "movie-1988-kurdish", "movie-war-machine", "movie-1780349245764-275"];
-
-// Components
-import { Header } from './components/Header';
-import { FeaturedBanner } from './components/FeaturedBanner';
-import { MovieGrid } from './components/MovieGrid';
-import { MovieDetailModal } from './components/MovieDetailModal';
-import { RequestMovieModal } from './components/RequestMovieModal';
-import { AdminPanel } from './components/AdminPanel';
-
-// Helper to safely save to localStorage and handle QuotaExceededError or other write failures gracefully
-const safeSaveLocalMovies = (moviesList: Movie[]) => {
-  try {
-    localStorage.setItem('shea_cinema_user_movies', JSON.stringify(moviesList));
-  } catch (error) {
-    console.warn("Storage quota exceeded, trying to save lightweight/cleared movie list", error);
-    try {
-      // Clear massive payloads (base64 string images) to fit inside quota
-      const lightweight = moviesList.map(movie => {
-        let posterUrl = movie.posterUrl;
-        let bannerUrl = movie.bannerUrl;
-        if (posterUrl && posterUrl.startsWith('data:image') && posterUrl.length > 50000) {
-          posterUrl = "https://images.unsplash.com/photo-1489599849927-2ee91cede3ba?auto=format&fit=crop&q=80&w=600";
-        }
-        if (bannerUrl && bannerUrl.startsWith('data:image') && bannerUrl.length > 50000) {
-          bannerUrl = "https://images.unsplash.com/photo-1536440136628-849c177e76a1?auto=format&fit=crop&q=80&w=1200";
-        }
-        return {
-          ...movie,
-          posterUrl,
-          bannerUrl
-        };
-      });
-      localStorage.setItem('shea_cinema_user_movies', JSON.stringify(lightweight));
-    } catch (innerError) {
-      console.error("Failed to save lightweight movies, saving only latest 10", innerError);
-      try {
-        const ultraLight = moviesList.slice(0, 10).map(movie => {
-          let posterUrl = movie.posterUrl;
-          let bannerUrl = movie.bannerUrl;
-          if (posterUrl && posterUrl.startsWith('data:image') && posterUrl.length > 50000) {
-            posterUrl = "https://images.unsplash.com/photo-1489599849927-2ee91cede3ba?auto=format&fit=crop&q=80&w=600";
-          }
-          if (bannerUrl && bannerUrl.startsWith('data:image') && bannerUrl.length > 50000) {
-            bannerUrl = "https://images.unsplash.com/photo-1536440136628-849c177e76a1?auto=format&fit=crop&q=80&w=1200";
-          }
-          return { ...movie, posterUrl, bannerUrl };
-        });
-        localStorage.setItem('shea_cinema_user_movies', JSON.stringify(ultraLight));
-      } catch (finalErr) {
-        console.error("Absolutely failed to save to localStorage", finalErr);
-      }
-    }
-  }
-};
+// Import visual assets / vector components
+import { Film, Send, Sparkles, LogIn, Star, Play, CheckCircle2, Tv, RefreshCw, Key, AlertCircle } from "lucide-react";
 
 export default function App() {
-  // DB State
+  const [user, setUser] = useState<FirebaseUser | null>(null);
+  const [isAdmin, setIsAdmin] = useState(false);
   const [movies, setMovies] = useState<Movie[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
-  const [currentBannerIndex, setCurrentBannerIndex] = useState(0);
-
-  // Active navigation settings
-  const [activeTab, setActiveTab] = useState('home'); // 'home' | 'movies' | 'series' | 'kurdish'
-  const [searchQuery, setSearchQuery] = useState('');
-
-  // Modals Toggles
+  const [searchQuery, setSearchQuery] = useState("");
   const [selectedMovie, setSelectedMovie] = useState<Movie | null>(null);
-  const [isDetailOpen, setIsDetailOpen] = useState(false);
-  const [isRequestOpen, setIsRequestOpen] = useState(false);
+  const [showAdminPanel, setShowAdminPanel] = useState(false);
+  const [activeCategory, setActiveCategory] = useState<string>("هەمووی");
+  const [isLoding, setIsLoading] = useState(true);
 
-  // Administration Toggle is gated inside App
-  const [isAdminPanelActive, setIsAdminPanelActive] = useState(false);
-  const [isAdminModeUnlocked, setIsAdminModeUnlocked] = useState(false); // Controls whether cards display edit/delete buttons
+  // Secret bypass password field for offline/local testing
+  const [bypassInput, setBypassInput] = useState("");
+  const [showBypassModal, setShowBypassModal] = useState(false);
+  const [showAuthWarning, setShowAuthWarning] = useState(false);
 
-  // Load Movies on Startup
-  const fetchMoviesList = async () => {
-    try {
-      setIsLoading(true);
-      const res = await fetch('/api/movies');
-      if (!res.ok) {
-        throw new Error(`سێرڤەر وەڵامی نەدایەوە بە دروستی: ${res.status}`);
-      }
-      
-      const rawServerMovies = await res.json() as Movie[];
-      if (!Array.isArray(rawServerMovies)) {
-        throw new Error("داتای وەرگیراو لە سێرڤەرەوە لیست نییە");
-      }
-      
-      // Ensure rawServerMovies itself is unique
-      const serverMovieMap = new Map<string, Movie>();
-      rawServerMovies.forEach(m => {
-        if (m && m.id && !EXCLUDED_DEFAULT_IDS.includes(m.id)) serverMovieMap.set(m.id, m);
-      });
-      let serverMovies = Array.from(serverMovieMap.values());
-
-      // If the server list is completely empty, populate with statically imported movies!
-      // This protects against server storage resets, database wipes, and early stages.
-      if (serverMovies.length === 0) {
-        serverMovies = (staticFallbackMovies as Movie[]).filter(m => m && m.id && !EXCLUDED_DEFAULT_IDS.includes(m.id));
-      }
-      
-      // Load from LocalStorage to see if we have newer/custom movies
-      const localMoviesStr = localStorage.getItem('shea_cinema_user_movies');
-      let finalMovies = serverMovies;
-      
-      if (localMoviesStr) {
-        try {
-          const localMovies = (JSON.parse(localMoviesStr) as Movie[]).filter(m => m && m.id && !EXCLUDED_DEFAULT_IDS.includes(m.id));
-          if (Array.isArray(localMovies)) {
-            const movieMap = new Map<string, Movie>();
-            
-            // 1. Add unique server movies first
-            serverMovies.forEach(m => {
-              if (m && m.id && !EXCLUDED_DEFAULT_IDS.includes(m.id)) movieMap.set(m.id, m);
-            });
-            
-            // 2. Add local movies (which may contain additional user-added movies lost from ephemeral container restart)
-            let hasNewMovieToUpload = false;
-            localMovies.forEach(m => {
-              if (m && m.id && !EXCLUDED_DEFAULT_IDS.includes(m.id)) {
-                if (!movieMap.has(m.id)) {
-                  movieMap.set(m.id, m);
-                  hasNewMovieToUpload = true;
-                  
-                  // Proactively restore to the server if the server was reset/rebuilt
-                  fetch('/api/movies', {
-                    method: 'POST',
-                    headers: {
-                      'Content-Type': 'application/json',
-                      'x-admin-password': 'ibos-808'
-                    },
-                    body: JSON.stringify(m)
-                  }).catch(err => console.error("Auto-sync back error", err));
-                }
-              }
-            });
-            
-            finalMovies = Array.from(movieMap.values());
-            // Sort by createdAt descending
-            finalMovies.sort((a, b) => new Date(b.createdAt || '').getTime() - new Date(a.createdAt || '').getTime());
-            
-            // If we restored movies, refresh from the server again after a brief moment
-            if (hasNewMovieToUpload) {
-              setTimeout(() => {
-                fetch('/api/movies')
-                  .then(r => r.json())
-                  .then((latest: Movie[]) => {
-                    if (Array.isArray(latest)) {
-                      const filteredLatest = latest.filter(m => m && m.id && !EXCLUDED_DEFAULT_IDS.includes(m.id));
-                      setMovies(filteredLatest);
-                      safeSaveLocalMovies(filteredLatest);
-                    }
-                  })
-                  .catch(err => console.error("Delayed refresh error", err));
-              }, 2000);
-            }
-          }
-        } catch (e) {
-          console.error("error parsing localStorage", e);
-        }
-      }
-      
-      // Ensure final absolute unique set
-      const finalUniqueMap = new Map<string, Movie>();
-      finalMovies.forEach(m => {
-        if (m && m.id && !EXCLUDED_DEFAULT_IDS.includes(m.id)) {
-          finalUniqueMap.set(m.id, m);
-        }
-      });
-      const absoluteUniqueMovies = Array.from(finalUniqueMap.values());
-      
-      setMovies(absoluteUniqueMovies);
-      safeSaveLocalMovies(absoluteUniqueMovies);
-    } catch (err) {
-      console.error("Failed loading index movies, using fallback mechanisms", err);
-      // Fallback: Check local storage, or statically bundled movies.json!
-      const localMoviesStr = localStorage.getItem('shea_cinema_user_movies');
-      let fallbackMovies: Movie[] = [];
-      if (localMoviesStr) {
-        try {
-          const parsedLocal = (JSON.parse(localMoviesStr) as Movie[]).filter(m => m && m.id && !EXCLUDED_DEFAULT_IDS.includes(m.id));
-          if (Array.isArray(parsedLocal)) {
-            const finalFallbackMap = new Map<string, Movie>();
-            
-            // Add custom local user movies
-            parsedLocal.forEach(m => {
-              if (m && m.id && !EXCLUDED_DEFAULT_IDS.includes(m.id)) {
-                finalFallbackMap.set(m.id, m);
-              }
-            });
-            
-            fallbackMovies = Array.from(finalFallbackMap.values());
-            fallbackMovies.sort((a, b) => new Date(b.createdAt || '').getTime() - new Date(a.createdAt || '').getTime());
-          }
-        } catch (e) {
-          console.error(e);
-        }
-      }
-      
-      // If local storage is empty, fallback to the statically bundled list!
-      if (fallbackMovies.length === 0) {
-        fallbackMovies = (staticFallbackMovies as Movie[]).filter(m => m && m.id && !EXCLUDED_DEFAULT_IDS.includes(m.id));
-      }
-      setMovies(fallbackMovies);
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
+  // Authenticate Admin based on email (abubakrsleman09@gmail.com)
   useEffect(() => {
-    fetchMoviesList();
-
-    // Check query params if user shared a direct movie link
-    const params = new URLSearchParams(window.location.search);
-    const sharedMovieId = params.get('movie');
-    if (sharedMovieId) {
-      fetch(`/api/movies`)
-        .then(res => res.json())
-        .then((allMovies: Movie[]) => {
-          const list = Array.isArray(allMovies) ? allMovies : staticFallbackMovies as Movie[];
-          const match = list.find(m => m.id === sharedMovieId);
-          if (match) {
-            setSelectedMovie(match);
-            setIsDetailOpen(true);
-          }
-        })
-        .catch(() => {
-          // Robust fallback search from the static fallback list
-          const match = (staticFallbackMovies as Movie[]).find(m => m.id === sharedMovieId);
-          if (match) {
-            setSelectedMovie(match);
-            setIsDetailOpen(true);
-          }
-        });
-    }
-
-    // Set up SSE EventSource for real-time live synchronization
-    const eventSource = new EventSource('/api/movies/live');
-
-    eventSource.onmessage = (event) => {
-      try {
-        const data = JSON.parse(event.data);
-        if (data && data.type === 'sync' && Array.isArray(data.movies)) {
-          console.log('Real-time movie database updated:', data.movies.length);
-          
-          // Absolute unique deduplication
-          const serverMovieMap = new Map<string, Movie>();
-          data.movies.forEach((m: Movie) => {
-            if (m && m.id) serverMovieMap.set(m.id, m);
-          });
-          const uniqueMovies = Array.from(serverMovieMap.values());
-          
-          setMovies(uniqueMovies);
-          safeSaveLocalMovies(uniqueMovies);
-        }
-      } catch (err) {
-        console.error('Error parsing live update:', err);
+    const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
+      setUser(currentUser);
+      if (currentUser?.email === "abubakrsleman09@gmail.com") {
+        setIsAdmin(true);
+      } else {
+        // Also check if local storage has manual admin bypass
+        const bypassActive = localStorage.getItem("shea_admin_bypass") === "true";
+        setIsAdmin(currentUser?.email === "abubakrsleman09@gmail.com" || bypassActive);
       }
-    };
-
-    eventSource.onerror = (err) => {
-      console.warn('Live feedback connection lost, retrying automatically...', err);
-    };
-
-    return () => {
-      eventSource.close();
-    };
+    });
+    return () => unsubscribe();
   }, []);
 
-  // Filter Logic
+  // Fetch Movies in Real-time from Firestore!
+  useEffect(() => {
+    setIsLoading(true);
+    const moviesQuery = query(collection(db, "movies"), orderBy("createdAt", "desc"));
+
+    const unsubscribe = onSnapshot(
+      moviesQuery,
+      (snapshot) => {
+        const loadedMovies: Movie[] = [];
+        snapshot.forEach((docSnap) => {
+          const data = docSnap.data();
+          loadedMovies.push({
+            id: docSnap.id,
+            ...data,
+          } as Movie);
+        });
+        setMovies(loadedMovies);
+        setIsLoading(false);
+
+        // Check if there is a deep link query in URL: e.g. /?movie=movieId
+        const params = new URLSearchParams(window.location.search);
+        const movieIdParam = params.get("movie");
+        if (movieIdParam) {
+          const matchedMovie = loadedMovies.find((m) => m.id === movieIdParam);
+          if (matchedMovie) {
+            setSelectedMovie(matchedMovie);
+          }
+        }
+      },
+      (error) => {
+        setIsLoading(false);
+        handleFirestoreError(error, OperationType.LIST, "movies");
+      }
+    );
+
+    return () => unsubscribe();
+  }, []);
+
+  // Trigger Google Login
+  const handleLogin = async () => {
+    try {
+      setShowAuthWarning(false);
+      await signInWithPopup(auth, googleProvider);
+    } catch (err: any) {
+      console.error("Login popup failed: ", err);
+      // Popup was likely blocked or cancelled by iframe nesting policies of standard browsers
+      setShowAuthWarning(true);
+    }
+  };
+
+  // Trigger Logout
+  const handleLogout = async () => {
+    try {
+      await signOut(auth);
+      localStorage.removeItem("shea_admin_bypass");
+      setIsAdmin(false);
+      setShowAdminPanel(false);
+    } catch (err) {
+      console.error("Logout failed: ", err);
+    }
+  };
+
+  // Check Developer Bypass Secret
+  const handleBypassSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (bypassInput.trim() === "shea2026") {
+      localStorage.setItem("shea_admin_bypass", "true");
+      setIsAdmin(true);
+      setShowAdminPanel(true);
+      setShowBypassModal(false);
+      setBypassInput("");
+    } else {
+      alert("نهێنییەکە هەڵەیە! جارێکی تر هەوڵبەوه.");
+    }
+  };
+
+  // Filter movies by search query and category
   const filteredMovies = movies.filter((movie) => {
-    // 1. Text Search Filter (Match both Kurdish and English Title)
     const matchesSearch =
-      searchQuery.trim() === '' ||
-      movie.titleKurdish.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      movie.titleEnglish.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      (movie.category && movie.category.toLowerCase().includes(searchQuery.toLowerCase()));
+      movie.title?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      movie.description?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      movie.genre?.toLowerCase().includes(searchQuery.toLowerCase());
 
-    // 2. Tab Category Filter
-    if (activeTab === 'movies') {
-      return matchesSearch && movie.contentType === 'movie';
-    }
-    if (activeTab === 'series') {
-      return matchesSearch && movie.contentType === 'series';
-    }
-    if (activeTab === 'korean') {
-      return matchesSearch && (movie.category === 'Korean' || movie.category === 'Drama' || movie.titleKurdish.includes('کۆری') || movie.description.includes('کۆری'));
-    }
-    if (activeTab === 'collections') {
-      return matchesSearch && (movie.category === 'Collection' || movie.category === 'Saga' || movie.isPinned === true || movie.category === 'Anime');
-    }
-    if (activeTab === 'kurdish') {
-      return matchesSearch && movie.category === 'Kurdish';
-    }
+    const matchesCategory =
+      activeCategory === "هەمووی" ||
+      (activeCategory === "ترێندینگ" && movie.isTrending) ||
+      movie.category === activeCategory;
 
-    return matchesSearch; // For 'home', show all
+    return matchesSearch && matchesCategory;
   });
 
-  // Calculate Candidates for Hero Billboard Banner rotation (Featured or Pinned movies, or fall back to the latest 5 movies)
-  const getBannerMovies = (): Movie[] => {
-    const candidates = movies.filter(m => m.isFeatured || m.isPinned);
-    if (candidates.length > 0) return candidates;
-    return movies.slice(0, 5); // fallback to latest 5
-  };
-
-  const bannerMovies = getBannerMovies();
-  const featuredMovie = bannerMovies[currentBannerIndex] || bannerMovies[0] || null;
-
-  // Automatically advance slides every 6 seconds
-  useEffect(() => {
-    if (bannerMovies.length <= 1) return;
-    const interval = setInterval(() => {
-      setCurrentBannerIndex((prev) => (prev + 1) % bannerMovies.length);
-    }, 6000); // changes every 6 seconds
-    return () => clearInterval(interval);
-  }, [bannerMovies.length]);
-
-  const handleOpenPlayer = (movie: Movie) => {
-    setSelectedMovie(movie);
-    setIsDetailOpen(true);
-  };
-
-  // Admin capabilities (directly triggers from unlocked state on main grids)
-  const handleDeleteMovie = async (id: string) => {
-    if (!window.confirm("دڵنیای لە سڕینەوەی ئەم بابەتە؟")) return;
-    
-    // 1. Remove from local storage first to sync immediately
-    const localMoviesStr = localStorage.getItem('shea_cinema_user_movies');
-    let localList = [...movies];
-    if (localMoviesStr) {
-      try {
-        const parsed = JSON.parse(localMoviesStr);
-        if (Array.isArray(parsed)) {
-          localList = parsed;
-        }
-      } catch (e) {
-        console.error(e);
-      }
-    }
-    const updated = localList.filter(m => m.id !== id);
-    safeSaveLocalMovies(updated);
-    
-    // Update live state immediately
-    setMovies(updated);
-
-    // 2. Safely call server delete API (fire and forget / gracefully catch offline static environments)
-    try {
-      await fetch(`/api/movies/${id}`, {
-        method: 'DELETE',
-        headers: { 'x-admin-password': 'ibos-808' }
-      });
-    } catch (err) {
-      console.warn("Server delete bypassed/failed (static mode)", err);
-    }
-  };
-
-  const handleTogglePinMovie = async (movie: Movie) => {
-    // 1. Toggle pin on local storage and live state immediately
-    const localMoviesStr = localStorage.getItem('shea_cinema_user_movies');
-    let localList = [...movies];
-    if (localMoviesStr) {
-      try {
-        const parsed = JSON.parse(localMoviesStr);
-        if (Array.isArray(parsed)) {
-          localList = parsed;
-        }
-      } catch (e) {
-        console.error(e);
-      }
-    }
-    
-    const updated = localList.map(m => m.id === movie.id ? { ...m, isPinned: !m.isPinned } : m);
-    safeSaveLocalMovies(updated);
-    setMovies(updated);
-
-    // 2. Safely call server PUT API
-    try {
-      await fetch(`/api/movies/${movie.id}`, {
-        method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json',
-          'x-admin-password': 'ibos-808'
-        },
-        body: JSON.stringify({ isPinned: !movie.isPinned })
-      });
-    } catch (err) {
-      console.warn("Server pin-toggle bypassed/failed (static mode)", err);
-    }
-  };
-
-  const handleEditMovieDirect = (movie: Movie) => {
-    // Redirects to admin panel view with editing state
-    setIsAdminPanelActive(true);
-  };
+  // Spotlight Movie (Trending, or Newest)
+  const spotlightMovie = movies.find((m) => m.isTrending) || movies[0];
 
   return (
-    <div className="flex flex-col min-h-screen bg-[#0A0A0A] text-white">
-      {/* Top Header Navbar */}
-      <Header
-        activeTab={activeTab}
-        setActiveTab={setActiveTab}
+    <div className="min-h-screen bg-[#070708] text-stone-100 font-sans select-none antialiased selection:bg-yellow-500 selection:text-stone-950">
+      
+      {/* Interactive Navigation bar */}
+      <Navbar
+        user={user}
+        isAdmin={isAdmin}
+        onLoginClick={handleLogin}
+        onLogoutClick={handleLogout}
+        onAdminPanelToggle={() => setShowAdminPanel(!showAdminPanel)}
+        showAdminPanel={showAdminPanel}
         searchQuery={searchQuery}
         setSearchQuery={setSearchQuery}
-        onOpenRequestModal={() => setIsRequestOpen(true)}
-        onAdminToggle={() => {
-          setIsAdminPanelActive(!isAdminPanelActive);
-          // Auto unlock admin layout tools on the front grids if we just closed/reopened
-          setIsAdminModeUnlocked(!isAdminModeUnlocked);
-        }}
-        isAdmin={isAdminModeUnlocked}
       />
 
-      <main className="flex-grow pb-16">
-        <AnimatePresence mode="wait">
-          {isAdminPanelActive ? (
-            /* ADMIN SECTION WORKSPACE (Hidden by passcode protection) */
-            <motion.div
-              key="admin-workspace"
-              initial={{ opacity: 0, y: -10 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: 10 }}
-            >
-              <AdminPanel
-                movies={movies}
-                onRefreshMovies={() => {
-                  fetchMoviesList();
-                  setIsAdminModeUnlocked(true); // Persist cards edit visual triggers
-                }}
-                onClosePanel={() => {
-                  setIsAdminPanelActive(false);
-                  setIsAdminModeUnlocked(false); // Lock card controls on front-end
-                }}
-              />
-            </motion.div>
-          ) : (
-            /* PUBLIC USER EXPERIENCE SYSTEM */
-            <motion.div
-              key="pulic-website"
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-              className="space-y-12 max-w-7xl mx-auto px-4 md:px-8 pt-6"
-            >
-              {/* Load Loader Indicator */}
-              {isLoading ? (
-                <div className="flex flex-col items-center justify-center py-32 text-center">
-                  <div className="w-12 h-12 rounded-full border-4 border-t-[#FFC80A] border-[#222222] animate-spin mb-4" />
-                  <p className="text-xs text-gray-500 font-bold">باردەکرێت... تکایە چاوەڕوان بە</p>
+      {/* Main Content Areas */}
+      <main className="min-h-[calc(100vh-230px)]">
+        {showAdminPanel && isAdmin ? (
+          /* Site Control Section for Admin (Kurdish) */
+          <AdminPanel
+            user={user}
+            isAdmin={isAdmin}
+            movies={movies}
+            onMovieSaved={() => {}}
+            onEditMovie={(movie) => {
+              // Action when editing starts
+            }}
+          />
+        ) : selectedMovie ? (
+          /* Expanded details video screen overlay */
+          <MovieDetail
+            movie={selectedMovie}
+            onClose={() => {
+              setSelectedMovie(null);
+              // Clean address bar query parameter
+              window.history.pushState({}, "", "/");
+            }}
+          />
+        ) : (
+          /* Main Public Front Catalogue */
+          <div>
+            {isLoadingMovies() ? (
+              /* High-end luxurious animated loader */
+              <div className="flex h-[60vh] flex-col items-center justify-center gap-4 text-stone-400">
+                <RefreshCw size={36} className="animate-spin text-yellow-400" />
+                <span className="text-xs font-sans">تکایە چاوەڕوانبە، داتاکان لۆد دەبن...</span>
+              </div>
+            ) : movies.length === 0 ? (
+              /* Clean Cinematic Welcome State for the Shea Cinema Creator */
+              <div className="mx-auto max-w-4xl px-4 py-20 text-center rtl-dir">
+                <div className="inline-flex h-16 w-16 items-center justify-center rounded-2xl bg-yellow-500/10 border border-yellow-500/20 text-yellow-400 mb-6 shadow-xl">
+                  <Film size={32} className="stroke-[2.5]" />
                 </div>
-              ) : (
-                <>
-                  {/* 1. Hero Spotlight Featured Billboard */}
-                  {featuredMovie && activeTab === 'home' && !searchQuery && (
-                    <FeaturedBanner
-                      movie={featuredMovie}
-                      onSelectMovie={handleOpenPlayer}
-                      currentIndex={currentBannerIndex}
-                      totalCount={bannerMovies.length}
-                      onChangeIndex={(idx) => setCurrentBannerIndex(idx)}
-                    />
-                  )}
+                <h1 className="text-2xl font-black md:text-3xl lg:text-4xl text-white font-sans tracking-tight mb-4">
+                  بەخێربێیت بۆ <span className="text-yellow-400">SHEA CINEMA</span>
+                </h1>
+                <p className="text-stone-400 text-sm max-w-lg mx-auto font-sans leading-relaxed mb-8">
+                  ئەمە پلاتفۆرمی کارا و فەرمییەکەتە بۆ بڵاوکردنەوەی ناوازەترین فیلم و زنجیرەکان.
+                  سایتەکە بە سەرکەوتوویی دروستکرا و پەیوەستە بە داتابەیسی بێسنوور بۆ بینینی خێرا!
+                  بەگوێرەی داواکاریەکەت هیچ فیلمێکی وەهمی لێرەدا نییە تاوەکو خۆت هەمووی داخڵ بکەیت.
+                </p>
 
-                  {/* 2. Headline curation subtitle shown in Image 2 footer text */}
-                  <div className="bg-[#1a1a1a] border border-white/10 rounded-2xl p-5 md:p-6 flex flex-col md:flex-row items-center justify-between gap-4 text-right rtl-dir shadow-lg mt-4">
-                    <div className="flex items-center gap-3">
-                      <div className="w-10 h-10 rounded-xl bg-[#FFC80A]/10 border border-[#FFC80A]/20 flex items-center justify-center shrink-0">
-                        <Flame className="w-5 h-5 text-[#FFC80A] animate-pulse" />
-                      </div>
-                      <div>
-                        <h2 className="text-sm md:text-base font-bold text-white leading-tight">پلاتفۆرمی فەرمی شیا سینەما</h2>
-                        <p className="text-xs text-amber-400 mt-1">ئێمە نوێترین فیلمەکان لەگەڵ ئەو فیلمانەی تری ترێند بە بەرزترین کوالیتی بڵاو دەکەینەوە.</p>
-                      </div>
-                    </div>
+                {/* Integration Help Card */}
+                <div className="rounded-2xl border border-stone-800 bg-[#0e0e11] p-6 text-right max-w-xl mx-auto space-y-4">
+                  <h3 className="text-xs font-bold text-stone-300 uppercase tracking-widest flex items-center justify-start gap-1">
+                    <Sparkles size={14} className="text-yellow-400" />
+                    <span>چۆن فیلم یان زنجیرەی تر زیاد دەکەم؟</span>
+                  </h3>
+                  <ol className="text-xs text-stone-400 space-y-2.5 list-decimal list-inside pr-2 leading-relaxed">
+                    <li>لە بالای وێبسایتەکە کلیک بکە سەر دوگمەی <b>چوونەژوورەوە (Google Login)</b></li>
+                    <li>ئەگەر لە ڕێگای ئیمەیڵەکەت وەک بەڕێوەبەر <b>abubakrsleman09@gmail.com</b> چوویتە ژوورەوە، دوگمەی <b>کۆنترۆڵ پانێڵ</b> بە شێوازی فەرمی دەکریتەوە.</li>
+                    <li>دەتوانیت سێرڤەر بە بەستەری بینینەوە بە شێوەی دینامیکی بۆ هەر پۆستەرێک دابنێیت.</li>
+                  </ol>
 
-                    <a
-                      href="https://t.me/sheacinema_offical"
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="text-xs bg-[#FFC80A]/10 border border-[#FFC80A]/30 text-[#FFC80A] hover:bg-[#FFC80A] hover:text-black font-extrabold px-4.5 py-2.5 rounded-xl transition-all duration-300"
+                  {/* Dev Secret code option for sandbox environment test */}
+                  <div className="pt-4 border-t border-stone-800 flex justify-between items-center gap-4">
+                    <button
+                      onClick={() => setShowBypassModal(true)}
+                      className="text-[11px] text-yellow-400 hover:underline flex items-center gap-1 font-sans"
                     >
-                      پەیوەندی بە تەلەگرام بکە 🚀
-                    </a>
+                      <Key size={12} />
+                      <span>چوونەژوورەوەی کاتی مۆدێراتۆر (گەر ئیمەیلت جیاواز بوو)</span>
+                    </button>
+                    <span className="text-[10px] text-stone-500">حیساب کەرەوەی ئاسانی بەستەرەکان</span>
                   </div>
+                </div>
+              </div>
+            ) : (
+              /* Widescreen catalog containing sliders, spotlights, categories and grid list */
+              <div className="pb-16">
+                
+                {/* Spotlight Billboard Banner (If Spotlight available) */}
+                {spotlightMovie && (
+                  <div className="relative w-full h-[55vh] overflow-hidden">
+                    {/* Background Artwork */}
+                    <img
+                      src={spotlightMovie.bannerUrl || spotlightMovie.posterUrl}
+                      alt={spotlightMovie.title}
+                      className="absolute inset-0 w-full h-full object-cover opacity-35 filter blur-[2px] transition-transform scale-105"
+                    />
+                    
+                    {/* Grand Dark overlay mask gradient */}
+                    <div className="absolute inset-0 bg-gradient-to-t from-[#070708] via-[#070708]/60 to-transparent" />
+                    <div className="absolute inset-0 bg-gradient-to-r from-transparent via-[#070708]/20 to-[#070708]/90" />
 
-                  {/* "ئێستا سەیردەکرێن" (Now Watching) Section matches Kurdsubtitle feature perfectly! */}
-                  {activeTab === 'home' && !searchQuery && (
-                    <div className="space-y-4 pt-2">
-                      <div className="flex items-center justify-between border-b border-white/10 pb-3 rtl-dir">
-                        <div className="flex items-center gap-2">
-                          <span className="relative flex h-3 w-3">
-                            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75"></span>
-                            <span className="relative inline-flex rounded-full h-3 w-3 bg-red-500"></span>
+                    {/* Spotlight Text details */}
+                    <div className="absolute inset-y-0 right-0 max-w-3xl flex flex-col justify-end p-6 md:p-12 text-right rtl-dir z-10 select-none">
+                      <div className="flex items-center gap-2 mb-2">
+                        <span className="rounded bg-yellow-500 px-2.5 py-0.5 text-[10px] font-black text-stone-950 uppercase tracking-wider font-sans">
+                          {spotlightMovie.category}
+                        </span>
+                        {spotlightMovie.rating && (
+                          <span className="rounded bg-stone-950/80 border border-yellow-500/20 px-2 py-0.5 text-xs font-bold text-yellow-400 backdrop-blur-md flex items-center gap-1">
+                            <Star size={11} className="fill-yellow-400 stroke-none" />
+                            {spotlightMovie.rating}
                           </span>
-                          <h2 className="text-base md:text-lg font-bold text-white flex items-center gap-1.5">
-                            ئێستا سەیردەکرێن (Currently Watching) 🍿
-                          </h2>
-                        </div>
-                        <span className="text-[10px] text-[#FFC80A] font-medium animate-pulse">شیا سینەما ڕاستەوخۆ 🔴</span>
+                        )}
+                        <span className="text-stone-300 text-xs font-mono font-medium">{spotlightMovie.year}</span>
                       </div>
+                      
+                      <h2 className="text-2xl font-black md:text-4xl lg:text-5xl text-white font-sans leading-tight">
+                        {spotlightMovie.title}
+                      </h2>
+                      
+                      <p className="mt-3.5 text-stone-300 text-sm font-sans leading-relaxed line-clamp-2 max-w-xl text-stone-400">
+                        {spotlightMovie.description || "نوێترین فیلمی بڵاوکراوە لەلایەن کەتەلۆگی زێڕینی Shea Cinema."}
+                      </p>
 
-                      <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-4">
-                        {movies.slice(0, 6).map((m) => (
-                          <motion.div
-                            key={`trending-${m.id}`}
-                            whileHover={{ scale: 1.03, y: -2 }}
-                            onClick={() => handleOpenPlayer(m)}
-                            className="bg-[#141414] border border-white/5 rounded-xl p-2 cursor-pointer space-y-2 group transition-all duration-300 hover:border-[#FFC80A]/40 flex flex-col justify-between"
-                          >
-                            <div className="relative aspect-[3/4.2] rounded-lg overflow-hidden bg-black">
-                              <img
-                                src={m.posterUrl}
-                                alt={m.titleKurdish}
-                                referrerPolicy="no-referrer"
-                                className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500"
-                              />
-                              <div className="absolute inset-0 bg-gradient-to-t from-black via-transparent to-transparent opacity-80" />
-                              <span className="absolute bottom-1.5 right-1.5 bg-black/80 backdrop-blur-md text-[8px] text-[#FFC80A] px-1.5 py-0.5 rounded font-bold border border-white/10">
-                                {m.rating.toFixed(1)} ★
-                              </span>
-                              <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity bg-black/40">
-                                <div className="p-2 rounded-full bg-[#FFC80A] text-black">
-                                  <svg className="w-4 h-4 fill-black" viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg>
-                                </div>
-                              </div>
-                            </div>
-                            <div className="text-right rtl-dir">
-                              <h3 className="text-xs font-bold text-white group-hover:text-[#FFC80A] transition-colors line-clamp-1">
-                                {m.titleKurdish}
-                              </h3>
-                              <p className="text-[9px] text-gray-500 font-mono truncate">{m.titleEnglish}</p>
-                            </div>
-                          </motion.div>
-                        ))}
+                      <div className="mt-6 flex flex-wrap gap-3 justify-start">
+                        <button
+                          onClick={() => setSelectedMovie(spotlightMovie)}
+                          className="flex items-center gap-2 rounded-xl bg-yellow-500 hover:bg-yellow-400 px-6 py-3 text-xs font-bold text-stone-950 transition-all hover:scale-105 duration-200 shadow-lg shadow-yellow-500/10"
+                        >
+                          <Play size={13} className="fill-current" />
+                          <span>بینینی ئێستا</span>
+                        </button>
                       </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* Category Filtering Tabs banner */}
+                <div className="mx-auto max-w-7xl px-4 md:px-6 mt-12 mb-8 text-right rtl-dir">
+                  <div className="flex flex-wrap gap-2 justify-start border-b border-stone-800/60 pb-5">
+                    {["هەمووی", "ترێندینگ", "فیلم", "زنجیرە", "فیلمی کوردی", "ئەنیمێ", "دۆکیومێنتاری"].map((cat) => (
+                      <button
+                        key={cat}
+                        onClick={() => setActiveCategory(cat)}
+                        className={`rounded-full px-5 py-2.5 text-xs font-bold font-sans transition-all duration-200 select-none ${
+                          activeCategory === cat
+                            ? "bg-yellow-500 text-stone-950 shadow-[0_4px_12px_rgba(234,179,8,0.2)]"
+                            : "bg-[#141416] border border-stone-800 text-stone-400 hover:text-white hover:border-stone-700"
+                        }`}
+                      >
+                        {cat}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Grid layout section of films list */}
+                <div className="mx-auto max-w-7xl px-4 md:px-6">
+                  {filteredMovies.length === 0 ? (
+                    <div className="py-24 text-center rounded-2xl border border-dashed border-stone-800">
+                      <span className="text-xs text-stone-500 font-sans">هیچ دۆکۆمێنت یان فیلمێک نەدۆزرایەوە کە لەگەڵ گەڕانەکەت گونجاو بێت.</span>
+                    </div>
+                  ) : (
+                    <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 mb-8">
+                      {filteredMovies.map((mov) => (
+                        <MovieCard
+                          key={mov.id}
+                          movie={mov}
+                          onSelect={(m) => setSelectedMovie(m)}
+                        />
+                      ))}
                     </div>
                   )}
+                </div>
 
-                  {/* 3. Section headline depending on tab */}
-                  <div className="space-y-6">
-                    <div className="flex items-center justify-between border-b border-white/10 pb-3 rtl-dir">
-                      <h2 className="text-lg md:text-xl font-bold text-white flex items-center gap-2">
-                        <span className="w-1 h-5 bg-[#FFC80A] rounded-full inline-block"></span>
-                        {activeTab === 'home' && searchQuery && 'ئەنجامەکانی گەڕان'}
-                        {activeTab === 'home' && !searchQuery && 'نوێترین و گەرمترین بڵاوکراوەکان 🔥'}
-                        {activeTab === 'movies' && 'فیلمەکان (Movies)'}
-                        {activeTab === 'series' && 'زنجیرە تلویزیۆنیەکان (Series)'}
-                        {activeTab === 'korean' && 'دراما و فیلمە کۆرییە ئاسیاییەکان 🇰🇷'}
-                        {activeTab === 'collections' && 'زنجیرە فیلمە مێژوویی و نوێیەکان 🎬'}
-                        {activeTab === 'kurdish' && 'بەرهەمی ناوازەی کوردی (Kurdish)'}
-                      </h2>
-                      <span className="text-xs text-gray-400 bg-[#1a1a1a] border border-white/10 px-3 py-1 rounded-full font-bold">
-                        تەواوی بابەتەکان {filteredMovies.length}
-                      </span>
-                    </div>
-
-                    {/* Movie Catalog Grid */}
-                    <MovieGrid
-                      movies={filteredMovies}
-                      isAdmin={isAdminModeUnlocked}
-                      onSelectMovie={handleOpenPlayer}
-                      onEditMovie={handleEditMovieDirect}
-                      onDeleteMovie={handleDeleteMovie}
-                      onTogglePinMovie={handleTogglePinMovie}
-                    />
-                  </div>
-
-                  {/* 4. Help Request Promotion Box */}
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6 pt-6">
-                    <div className="bg-[#1a1a1a] border border-white/10 rounded-2xl p-6 text-right rtl-dir flex flex-col justify-between space-y-4 shadow-lg">
-                      <div>
-                        <span className="text-[10px] text-amber-500 font-mono font-bold uppercase tracking-wider block mb-1">REQEST BOX</span>
-                        <h3 className="text-base font-bold text-white mb-2">فیلمێک هەیە دەتەوێت؟</h3>
-                        <p className="text-xs text-gray-400 leading-relaxed">
-                          ئەگەر سەیری پلاتفۆرمەکەت کردوو هەر فیلم یان زنجیرەیەکت دەست نەکەوت، تکایە ڕاستەوخۆ داوامان لێبکە تا لە خێراترین کات پۆستی بکەین.
-                        </p>
-                      </div>
-                      <button
-                        onClick={() => setIsRequestOpen(true)}
-                        className="bg-white/5 hover:bg-white/10 border border-white/10 hover:text-[#FFC80A] text-white font-bold text-xs py-2.5 rounded-lg transition"
-                      >
-                        داواکردنی فیلمی نوێ 🍿
-                      </button>
-                    </div>
-
-                    <div className="bg-[#1a1a1a] border border-white/10 rounded-2xl p-6 text-right rtl-dir flex flex-col justify-between space-y-4 shadow-lg">
-                      <div>
-                        <span className="text-[10px] text-[#FFC80A] font-mono font-bold uppercase tracking-wider block mb-1">TELEGRAM GROUP</span>
-                        <h3 className="text-base font-bold text-white mb-2">کەناڵی فەرمی تیلیگرام</h3>
-                        <p className="text-xs text-gray-300 leading-relaxed">
-                          بۆ دابین کردنی نوێترین فیلمەکان لەگەڵ ترێندە بەهێزەکان پێش هەمووان، پەیوەندیمان پێوە بکەن و ستافی شیا ببینن لێرەوە.
-                        </p>
-                      </div>
-                      <a
-                        href="https://t.me/sheacinema_offical"
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="bg-[#FFC80A] hover:bg-[#E2B200] text-black font-black text-xs py-2.5 rounded-lg transition shrink-0 block text-center"
-                      >
-                        کلیک بکە بۆ چوونە ناو تیلیگرامەکەمان
-                      </a>
-                    </div>
-                  </div>
-                </>
-              )}
-            </motion.div>
-          )}
-        </AnimatePresence>
+              </div>
+            )}
+          </div>
+        )}
       </main>
 
-      {/* Footer credits matches exact Kurdish requested text */}
-      <footer className="bg-[#1a1a1a] border-t border-white/10 pt-8 pb-18 px-4 md:px-8 text-center text-xs text-gray-500">
-        <div className="max-w-7xl mx-auto flex flex-col md:flex-row items-center justify-between gap-4">
-          <div className="text-gray-600 order-3 md:order-1 font-mono">
-            Shea Cinema © 2026. All rights reserved.
+      {/* Developer testing bypass modal */}
+      {showBypassModal && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm rtl-dir">
+          <div className="w-full max-w-sm rounded-2xl bg-[#111113] border border-stone-800 p-6 text-right">
+            <h3 className="text-stone-100 font-bold text-sm font-sans mb-1 flex items-center justify-start gap-1">
+              <Key size={15} className="text-yellow-400" />
+              <span>چوونەژوورەوەی کورتکراوە بۆ تاقیکردنەوە</span>
+            </h3>
+            <p className="text-[11px] text-stone-400 mb-4 font-sans leading-relaxed">
+              تکایە کلیلی مۆدێراتۆر کە پێکدێت لە 'shea2026' بنووسە بۆ چالاککردنی کۆنترۆڵ پانێلی زیادکردنی فیلمەکان بۆ تێست کردن بەبێ پێویستی بە دۆمەینی فەرمی abubakrsleman09@gmail.com
+            </p>
+            <form onSubmit={handleBypassSubmit} className="space-y-4">
+              <input
+                type="password"
+                required
+                value={bypassInput}
+                onChange={(e) => setBypassInput(e.target.value)}
+                placeholder="نهێنی..."
+                className="w-full text-xs rounded-xl border border-stone-800 bg-[#161619] px-4 py-3 text-stone-100 focus:border-yellow-500/50 focus:outline-none"
+              />
+              <div className="flex gap-2">
+                <button
+                  type="submit"
+                  className="flex-1 rounded-xl bg-yellow-500 py-2.5 text-xs font-bold text-stone-950 hover:bg-yellow-400"
+                >
+                  چالاککردن
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setShowBypassModal(false)}
+                  className="rounded-xl border border-stone-800 px-4 py-2.5 text-xs text-stone-400 hover:text-white"
+                >
+                  پاشگەزبوونەوە
+                </button>
+              </div>
+            </form>
           </div>
+        </div>
+      )}
 
-          <div className="flex items-center gap-4 order-2 text-[11px]">
-            <a href="https://t.me/sheacinema_offical" target="_blank" rel="noopener noreferrer" className="hover:text-[#FFC80A] transition">
-              Telegram Channel
-            </a>
-            <span className="text-gray-800">•</span>
-            <span className="text-gray-400 font-semibold">
-              دیزاین کراوە لە لایەن shea cinema 2026
-            </span>
-          </div>
+      {/* Auth Help / IFrame Popup Block Warning Modal */}
+      {showAuthWarning && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm rtl-dir text-right">
+          <div className="w-full max-w-md rounded-2xl bg-[#111113] border border-stone-800 p-6">
+            <div className="flex items-center gap-2 text-yellow-500 mb-3">
+              <AlertCircle size={20} className="stroke-[2.5]" />
+              <h3 className="text-stone-100 font-bold text-sm font-sans">هاوکاری چوونەژوورەوە (Login Help)</h3>
+            </div>
+            
+            <p className="text-[11px] text-stone-300 mb-4 font-sans leading-relaxed">
+              لەبەر ئەوەی ماڵپەڕەکە لەناو چوارچێوەی نموونەیی (Preview iFrame) دایە، پەنجەرەی پۆپ-ئەپی چوونەژوورەوەی گۆگڵ (Google Popup) ڕەنگە لەلایەن برۆسەرەکەتەوە ڕێگری لێبکرێت یان هەڵبوەشێتەوە.
+            </p>
 
-          <div className="flex items-center gap-2 order-1 md:order-3">
-            <span className="font-bold text-sm tracking-widest text-white">
-              SHEA <span className="text-[#FFC80A]">CINEMA</span>
-            </span>
-            <div className="w-6 h-6">
-              <svg viewBox="0 0 100 100" fill="none" xmlns="http://www.w3.org/2000/svg" className="w-full h-full">
-                <path d="M50 32C40 32 32 38 32 45C32 52 40 54 50 56C58 58 64 60 64 68C64 76 56 82 45 82C32 82 24 75 22 68H34C36 71 40 74 45 74C50 74 53 72 53 68C53 64 48 62 40 60C30 58 22 55 22 45C22 35 32 28 45 28C56 28 64 34 66 40H54C52 36 50 32 50 32Z" fill="#FFC80A" />
-                <path d="M85 36H73C75 40 76 45 76 50C76 55 75 60 73 64H85C87 60 88 55 88 50C88 45 87 40 85 36ZM73 28C85 28 94 38 94 50C94 62 85 72 73 72V64C81 64 86 58 86 50C86 42 81 36 73 36V28Z" fill="#FFFFFF" fillOpacity="0.9" />
-              </svg>
+            <div className="bg-[#17171a] rounded-xl p-4 border border-stone-800 space-y-3.5 text-xs text-stone-400 font-sans mb-5 leading-relaxed">
+              <div className="flex gap-2.5 items-start">
+                <span className="flex h-5 w-5 items-center justify-center rounded-full bg-yellow-500/15 text-yellow-500 font-bold text-[10px] flex-shrink-0 mt-0.5">١</span>
+                <p>
+                  وێبسایتەکە <b className="text-stone-100">بکەرەوە لە تابێکی تازەدا</b> بە کلیک کردن لەسەر دوگمەی سەرەوەی لای ڕاستی ڕوونماکە، پاشان دووبارە کلیک لە چوونەژوورەوە بکە.
+                </p>
+              </div>
+
+              <div className="flex gap-2.5 items-start">
+                <span className="flex h-5 w-5 items-center justify-center rounded-full bg-yellow-500/15 text-yellow-500 font-bold text-[10px] flex-shrink-0 mt-0.5">٢</span>
+                <p>
+                  یاخود تەنها کلیک لەسەر دوگمەی ژێرەوە بکە بۆ تێپەڕاندنی خێرا لە ڕێگەی <b className="text-stone-100">ناوی نهێنی مۆدێراتۆر (shea2026)</b> بەبێ پێویستی بە جیمەیڵ.
+                </p>
+              </div>
+            </div>
+
+            <div className="flex gap-2.5">
+              <button
+                onClick={() => {
+                  setShowAuthWarning(false);
+                  setShowBypassModal(true);
+                }}
+                className="flex-1 rounded-xl bg-yellow-500 py-2.5 text-xs font-bold text-stone-950 hover:bg-yellow-400 hover:shadow-[0_4px_12px_rgba(234,179,8,0.2)] active:scale-95 transition-all"
+              >
+                بەکارهێنانی کۆدی کاتی (shea2026)
+              </button>
+              
+              <button
+                onClick={() => setShowAuthWarning(false)}
+                className="rounded-xl border border-stone-800 px-4 py-2.5 text-xs text-stone-400 hover:text-white"
+              >
+                پاشگەزبوونەوە
+              </button>
             </div>
           </div>
         </div>
+      )}
+
+      {/* Main Luxury Brand Footer */}
+      <footer className="border-t border-stone-800 bg-[#070708] py-8 text-center text-xs selection:bg-yellow-500 text-stone-500 rtl-dir font-sans">
+        <div className="mx-auto max-w-7xl px-4 flex flex-col sm:flex-row-reverse sm:justify-between items-center gap-4">
+          
+          {/* Copyright description */}
+          <div className="text-right">
+            <p className="text-stone-300 font-sans font-medium text-xs">
+              © ٢٠٢٦ Shea Cinema. هەموو مافەکان پارێزراوە.
+            </p>
+            <p className="text-[11px] text-stone-500 font-sans mt-1">
+              دیزاین کراوە لە لایەن <b className="text-yellow-500">Shea Cinema 2026</b>
+            </p>
+          </div>
+
+          {/* Prompt requested descriptions */}
+          <div className="flex flex-col items-center sm:items-start text-center sm:text-left gap-1">
+            <p className="text-center sm:text-right text-stone-400 max-w-md text-[11px] leading-relaxed">
+              ئێمە نوێترین فیلمەکان لەگەڵ ئەو فیلمانەی ترێندن بڵاودەکەینەوە بە خێراترێن و باشترێن سێرڤەر.
+            </p>
+            {/* Clickable telegram button */}
+            <a
+              href="https://t.me/sheacinema_offical"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="mt-1 text-xs text-yellow-400 hover:text-yellow-300 flex items-center gap-1 justify-center"
+            >
+              <Send size={12} className="transform rotate-[-30deg]" />
+              <span>بۆ پەیوەندیکردن و داواکاری سەردانی کەناڵی تیلیگرام بکە</span>
+            </a>
+          </div>
+
+        </div>
       </footer>
-
-      {/* Cinematic Detail Play movie Modal */}
-      <MovieDetailModal
-        movie={selectedMovie}
-        isOpen={isDetailOpen}
-        onClose={() => {
-          setSelectedMovie(null);
-          setIsDetailOpen(false);
-          // clear URL queries on modal close
-          const url = new URL(window.location.href);
-          url.searchParams.delete('movie');
-          window.history.pushState({}, '', url.toString());
-        }}
-      />
-
-      {/* Users requesting pop-up modal */}
-      <RequestMovieModal
-        isOpen={isRequestOpen}
-        onClose={() => setIsRequestOpen(false)}
-        onSubmitSuccess={() => {}}
-      />
-
-      {/* Sticky Quick Bar */}
-      <div className="fixed bottom-0 left-0 right-0 h-10 bg-[#FFC80A] px-4 md:px-8 flex items-center justify-between text-black text-[11.5px] font-black z-40 select-none shadow-2xl">
-        <div className="flex gap-4 md:gap-7 overflow-x-auto no-scrollbar py-1">
-          <span className="shrink-0 uppercase tracking-tighter">نوێترین بڵاوکراوە: <span className="underline font-black">{(movies.length > 0 && movies[0].titleKurdish) || "دیار عەرەب"}</span></span>
-          <span className="shrink-0 text-black/30">•</span>
-          <span className="shrink-0 uppercase tracking-tighter">فیلمی پێشنیارکراو: <span className="underline font-black">{(movies.find(m => m.isPinned)?.titleKurdish) || "جەنگی جیهانی"}</span></span>
-          <span className="shrink-0 text-black/30">•</span>
-          <span className="shrink-0 uppercase tracking-tighter">بەرهەمی کوردی: <span className="underline font-black">{movies.filter(m => m.category === 'Kurdish').length} دانە</span></span>
-        </div>
-        <div className="flex items-center gap-4 shrink-0 font-mono text-[10px] md:text-[11px]">
-          <span className="hidden md:inline font-bold">SERVER STATUS: ONLINE</span>
-          <span className="bg-black text-[#FFC80A] px-2 py-0.5 rounded font-black">NISSAN API v4.2</span>
-        </div>
-      </div>
     </div>
   );
+
+  function isLoadingMovies() {
+    return isLoding;
+  }
 }

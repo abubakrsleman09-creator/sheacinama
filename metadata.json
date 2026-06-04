@@ -1,6 +1,6 @@
 {
   "name": "Shea Cinema",
-  "description": "پلاتفۆرمی مۆدێرن و خێرای شیا سینەما بۆ نیشاندانی نوێترین فیلم و زنجیرەکان",
+  "description": "پلاتفۆرمی فەرمی بۆ بینینی فیلم و زنجیرەکان بە نوێترین شێوازی مۆدێرن و خێرا",
   "requestFramePermissions": [],
   "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
 }

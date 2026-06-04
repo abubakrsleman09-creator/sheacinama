@@ -1,41 +1,21 @@
-export interface WatchServer {
+export interface StreamServer {
   id: string;
-  name: string; // e.g., "FAST SERVER", "VIP SERVER", "OK.RU", "VIP PLAYER"
-  url: string;  // Streaming embed URL / MP4 URL
+  name: string;
+  url: string;
 }
-
-export type ContentType = 'movie' | 'series';
 
 export interface Movie {
   id: string;
-  titleKurdish: string;
-  titleEnglish: string;
+  title: string;
   description: string;
-  contentType: ContentType;
-  category: string;
-  rating: number;
-  year: number;
-  duration: string;
-  isFeatured: boolean;
+  year: string;
+  category: "فیلم" | "زنجیرە" | "ئەنیمێ" | "دۆکیومێنتاری" | string;
+  genre: string; // e.g., "ئاکشن, دراما, سەرکێشی"
+  rating: string; // e.g., "8.7"
   posterUrl: string;
-  bannerUrl: string;
-  servers: WatchServer[];
-  isPinned?: boolean; // Featured pin toggled in management
-  createdAt: string;
-}
-
-export interface MovieRequest {
-  id: string;
-  movieTitle: string;
-  contentType: ContentType;
-  requesterName: string;
-  createdAt: string;
-  status: 'pending' | 'completed';
-}
-
-export interface PlatformStats {
-  totalMovies: number;
-  totalSeries: number;
-  totalRequests: number;
-  totalServersCount: number;
+  bannerUrl?: string; // Larger high-quality backdrop
+  servers: StreamServer[];
+  isTrending: boolean;
+  createdAt: any; // Firestore serverTimestamp
+  updatedAt?: any;
 }
