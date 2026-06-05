@@ -12,7 +12,7 @@ import MovieDetail from "./components/MovieDetail";
 import AdminPanel from "./components/AdminPanel";
 
 // Import visual assets / vector components
-import { Film, Send, Sparkles, LogIn, Star, Play, CheckCircle2, Tv, RefreshCw, Key, AlertCircle } from "lucide-react";
+import { Film, Send, Sparkles, LogIn, Star, Play, CheckCircle2, Tv, RefreshCw, Key, AlertCircle, ChevronLeft, ChevronRight } from "lucide-react";
 
 export default function App() {
   const [user, setUser] = useState<FirebaseUser | null>(null);
@@ -47,7 +47,7 @@ export default function App() {
   // Fetch Movies in Real-time from Firestore!
   useEffect(() => {
     setIsLoading(true);
-    const moviesQuery = query(collection(db, "movies"), orderBy("createdAt", "desc"));
+    const moviesQuery = query(collection(db, "movies"));
 
     const unsubscribe = onSnapshot(
       moviesQuery,
@@ -60,6 +60,37 @@ export default function App() {
             ...data,
           } as Movie);
         });
+
+        // Robust client-side sort (descending order by createdAt, then fallback to updatedAt, then default to 0)
+        loadedMovies.sort((a, b) => {
+          const getTime = (val: any, fallbackVal?: any) => {
+            const current = val || fallbackVal;
+            if (!current) return 0;
+            // Handle Firebase Timestamp with toMillis
+            if (typeof current.toMillis === "function") return current.toMillis();
+            // Handle regular Firebase Timestamp object
+            if (current.seconds) {
+              return current.seconds * 1000 + Math.floor((current.nanoseconds || 0) / 1000000);
+            }
+            // Handle standard Javascript Date
+            if (current instanceof Date) return current.getTime();
+            // Handle Date strings
+            if (typeof current === "string") return new Date(current).getTime();
+            // Handle already converted milliseconds
+            if (typeof current === "number") return current;
+            return 0;
+          };
+
+          const timeA = getTime(a.createdAt, a.updatedAt);
+          const timeB = getTime(b.createdAt, b.updatedAt);
+
+          if (timeB !== timeA) {
+            return timeB - timeA; // Newest first
+          }
+          // Secondary alphabetical sort on ID as tiebreaker
+          return (b.id || "").localeCompare(a.id || "");
+        });
+
         setMovies(loadedMovies);
         setIsLoading(false);
 
@@ -109,7 +140,7 @@ export default function App() {
   // Check Developer Bypass Secret
   const handleBypassSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (bypassInput.trim() === "shea2026") {
+    if (bypassInput.trim() === "ibo-808") {
       localStorage.setItem("shea_admin_bypass", "true");
       setIsAdmin(true);
       setShowAdminPanel(true);
@@ -135,8 +166,42 @@ export default function App() {
     return matchesSearch && matchesCategory;
   });
 
-  // Spotlight Movie (Trending, or Newest)
-  const spotlightMovie = movies.find((m) => m.isTrending) || movies[0];
+  // Spotlight Movies Carousel (Trending first, fallback to all, up to 6 slides)
+  const [spotlightIndex, setSpotlightIndex] = useState(0);
+
+  const finalSpotlights = React.useMemo(() => {
+    const trending = movies.filter((m) => m.isTrending);
+    const pool = trending.length > 0 ? trending : movies;
+    return pool.slice(0, 6);
+  }, [movies]);
+
+  const spotlightMovie = finalSpotlights[spotlightIndex] || null;
+
+  // Safeguard index if finalSpotlights shrink
+  useEffect(() => {
+    if (spotlightIndex >= finalSpotlights.length && finalSpotlights.length > 0) {
+      setSpotlightIndex(0);
+    }
+  }, [finalSpotlights.length, spotlightIndex]);
+
+  // Automatic slide rotation every 6 seconds
+  useEffect(() => {
+    if (finalSpotlights.length <= 1) return;
+    const interval = setInterval(() => {
+      setSpotlightIndex((prev) => (prev + 1) % finalSpotlights.length);
+    }, 6000);
+    return () => clearInterval(interval);
+  }, [finalSpotlights.length]);
+
+  const handlePrevSlide = () => {
+    if (finalSpotlights.length === 0) return;
+    setSpotlightIndex((prev) => (prev - 1 + finalSpotlights.length) % finalSpotlights.length);
+  };
+
+  const handleNextSlide = () => {
+    if (finalSpotlights.length === 0) return;
+    setSpotlightIndex((prev) => (prev + 1) % finalSpotlights.length);
+  };
 
   return (
     <div className="min-h-screen bg-[#070708] text-stone-100 font-sans select-none antialiased selection:bg-yellow-500 selection:text-stone-950">
@@ -229,53 +294,97 @@ export default function App() {
               /* Widescreen catalog containing sliders, spotlights, categories and grid list */
               <div className="pb-16">
                 
-                {/* Spotlight Billboard Banner (If Spotlight available) */}
+                {/* Spotlight Billboard Banner with elegant Slider/Carousel Controls */}
                 {spotlightMovie && (
-                  <div className="relative w-full h-[55vh] overflow-hidden">
-                    {/* Background Artwork */}
-                    <img
-                      src={spotlightMovie.bannerUrl || spotlightMovie.posterUrl}
-                      alt={spotlightMovie.title}
-                      className="absolute inset-0 w-full h-full object-cover opacity-35 filter blur-[2px] transition-transform scale-105"
-                    />
-                    
-                    {/* Grand Dark overlay mask gradient */}
-                    <div className="absolute inset-0 bg-gradient-to-t from-[#070708] via-[#070708]/60 to-transparent" />
-                    <div className="absolute inset-0 bg-gradient-to-r from-transparent via-[#070708]/20 to-[#070708]/90" />
+                  <div className="relative w-full h-[55vh] overflow-hidden group select-none">
+                    {/* Unique keys to trigger smooth CSS animations on change */}
+                    <div key={spotlightMovie.id} className="absolute inset-0 w-full h-full animate-[fadeIn_0.6s_ease-out]">
+                      {/* Background Artwork */}
+                      <img
+                        src={spotlightMovie.bannerUrl || spotlightMovie.posterUrl}
+                        alt={spotlightMovie.title}
+                        className="absolute inset-0 w-full h-full object-cover opacity-35 filter blur-[2px] transition-transform duration-700 scale-100 group-hover:scale-105"
+                      />
+                      
+                      {/* Grand Dark overlay mask gradient */}
+                      <div className="absolute inset-0 bg-gradient-to-t from-[#070708] via-[#070708]/60 to-transparent" />
+                      <div className="absolute inset-0 bg-gradient-to-r from-transparent via-[#070708]/20 to-[#070708]/95" />
 
-                    {/* Spotlight Text details */}
-                    <div className="absolute inset-y-0 right-0 max-w-3xl flex flex-col justify-end p-6 md:p-12 text-right rtl-dir z-10 select-none">
-                      <div className="flex items-center gap-2 mb-2">
-                        <span className="rounded bg-yellow-500 px-2.5 py-0.5 text-[10px] font-black text-stone-950 uppercase tracking-wider font-sans">
-                          {spotlightMovie.category}
-                        </span>
-                        {spotlightMovie.rating && (
-                          <span className="rounded bg-stone-950/80 border border-yellow-500/20 px-2 py-0.5 text-xs font-bold text-yellow-400 backdrop-blur-md flex items-center gap-1">
-                            <Star size={11} className="fill-yellow-400 stroke-none" />
-                            {spotlightMovie.rating}
+                      {/* Spotlight Text details */}
+                      <div className="absolute inset-y-0 right-0 max-w-3xl flex flex-col justify-end p-6 md:p-12 text-right rtl-dir z-10">
+                        <div className="flex items-center gap-2 mb-2">
+                          <span className="rounded bg-yellow-500 px-2.5 py-0.5 text-[10px] font-black text-stone-950 uppercase tracking-wider font-sans">
+                            {spotlightMovie.category}
                           </span>
-                        )}
-                        <span className="text-stone-300 text-xs font-mono font-medium">{spotlightMovie.year}</span>
-                      </div>
-                      
-                      <h2 className="text-2xl font-black md:text-4xl lg:text-5xl text-white font-sans leading-tight">
-                        {spotlightMovie.title}
-                      </h2>
-                      
-                      <p className="mt-3.5 text-stone-300 text-sm font-sans leading-relaxed line-clamp-2 max-w-xl text-stone-400">
-                        {spotlightMovie.description || "نوێترین فیلمی بڵاوکراوە لەلایەن کەتەلۆگی زێڕینی Shea Cinema."}
-                      </p>
+                          {spotlightMovie.rating && (
+                            <span className="rounded bg-stone-950/80 border border-yellow-500/20 px-2 py-0.5 text-xs font-bold text-yellow-400 backdrop-blur-md flex items-center gap-1">
+                              <Star size={11} className="fill-yellow-400 stroke-none" />
+                              {spotlightMovie.rating}
+                            </span>
+                          )}
+                          <span className="text-stone-300 text-xs font-mono font-medium">{spotlightMovie.year}</span>
+                        </div>
+                        
+                        <h2 className="text-2xl font-black md:text-4xl lg:text-5xl text-white font-sans leading-tight">
+                          {spotlightMovie.title}
+                        </h2>
+                        
+                        <p className="mt-3.5 text-stone-300 text-sm font-sans leading-relaxed line-clamp-2 max-w-xl text-stone-400">
+                          {spotlightMovie.description || "نوێترین فیلمی بڵاوکراوە لەلایەن کەتەلۆگی زێڕینی Shea Cinema."}
+                        </p>
 
-                      <div className="mt-6 flex flex-wrap gap-3 justify-start">
-                        <button
-                          onClick={() => setSelectedMovie(spotlightMovie)}
-                          className="flex items-center gap-2 rounded-xl bg-yellow-500 hover:bg-yellow-400 px-6 py-3 text-xs font-bold text-stone-950 transition-all hover:scale-105 duration-200 shadow-lg shadow-yellow-500/10"
-                        >
-                          <Play size={13} className="fill-current" />
-                          <span>بینینی ئێستا</span>
-                        </button>
+                        <div className="mt-6 flex flex-wrap gap-3 justify-start">
+                          <button
+                            onClick={() => setSelectedMovie(spotlightMovie)}
+                            className="flex items-center gap-2 rounded-xl bg-yellow-500 hover:bg-yellow-400 px-6 py-3 text-xs font-bold text-stone-950 transition-all hover:scale-105 duration-200 shadow-lg shadow-yellow-500/10 cursor-pointer"
+                          >
+                            <Play size={13} className="fill-current" />
+                            <span>بینینی ئێستا</span>
+                          </button>
+                        </div>
                       </div>
                     </div>
+
+                    {/* Navigation Arrows (Visible on hover) */}
+                    {finalSpotlights.length > 1 && (
+                      <>
+                        {/* Right/Next Button (aligned to right edge with Kurdish layout) */}
+                        <button
+                          onClick={handlePrevSlide}
+                          className="absolute left-4 top-1/2 -translate-y-1/2 z-20 flex h-10 w-10 items-center justify-center rounded-full bg-black/40 border border-stone-800 text-stone-300 backdrop-blur-sm opacity-0 group-hover:opacity-100 transition-opacity hover:bg-yellow-500 hover:text-stone-900 duration-200 cursor-pointer"
+                          aria-label="Previous Slide"
+                        >
+                          <ChevronLeft size={20} />
+                        </button>
+
+                        {/* Left/Prev Button */}
+                        <button
+                          onClick={handleNextSlide}
+                          className="absolute right-4 top-1/2 -translate-y-1/2 z-20 flex h-10 w-10 items-center justify-center rounded-full bg-black/40 border border-stone-800 text-stone-300 backdrop-blur-sm opacity-0 group-hover:opacity-100 transition-opacity hover:bg-yellow-500 hover:text-stone-900 duration-200 cursor-pointer"
+                          aria-label="Next Slide"
+                        >
+                          <ChevronRight size={20} />
+                        </button>
+                      </>
+                    )}
+
+                    {/* Bottom Indicator Dots */}
+                    {finalSpotlights.length > 1 && (
+                      <div className="absolute bottom-5 left-1/2 -translate-x-1/2 z-20 flex gap-2">
+                        {finalSpotlights.map((_, idx) => (
+                          <button
+                            key={idx}
+                            onClick={() => setSpotlightIndex(idx)}
+                            className={`h-1.5 rounded-full transition-all duration-300 cursor-pointer ${
+                              idx === spotlightIndex 
+                                ? "w-6 bg-yellow-500 shadow-[0_0_8px_rgba(234,179,8,0.6)]" 
+                                : "w-1.5 bg-stone-600 hover:bg-stone-400"
+                            }`}
+                            aria-label={`Go to slide ${idx + 1}`}
+                          />
+                        ))}
+                      </div>
+                    )}
                   </div>
                 )}
 
@@ -329,10 +438,10 @@ export default function App() {
           <div className="w-full max-w-sm rounded-2xl bg-[#111113] border border-stone-800 p-6 text-right">
             <h3 className="text-stone-100 font-bold text-sm font-sans mb-1 flex items-center justify-start gap-1">
               <Key size={15} className="text-yellow-400" />
-              <span>چوونەژوورەوەی کورتکراوە بۆ تاقیکردنەوە</span>
+              <span>چوونەژوورەوەی مۆدێراتۆر (Moderator Bypass)</span>
             </h3>
             <p className="text-[11px] text-stone-400 mb-4 font-sans leading-relaxed">
-              تکایە کلیلی مۆدێراتۆر کە پێکدێت لە 'shea2026' بنووسە بۆ چالاککردنی کۆنترۆڵ پانێلی زیادکردنی فیلمەکان بۆ تێست کردن بەبێ پێویستی بە دۆمەینی فەرمی abubakrsleman09@gmail.com
+              تکایە کۆدی نهێنی مۆدێراتۆر کە لەلایەن بەڕێوەبەرەوە پێدراوە بنووسە بۆ چالاککردنی پانێڵی پاراستن و بەڕێوەبردن.
             </p>
             <form onSubmit={handleBypassSubmit} className="space-y-4">
               <input
@@ -340,7 +449,7 @@ export default function App() {
                 required
                 value={bypassInput}
                 onChange={(e) => setBypassInput(e.target.value)}
-                placeholder="نهێنی..."
+                placeholder="کۆدی نهێنی..."
                 className="w-full text-xs rounded-xl border border-stone-800 bg-[#161619] px-4 py-3 text-stone-100 focus:border-yellow-500/50 focus:outline-none"
               />
               <div className="flex gap-2">
@@ -387,7 +496,7 @@ export default function App() {
               <div className="flex gap-2.5 items-start">
                 <span className="flex h-5 w-5 items-center justify-center rounded-full bg-yellow-500/15 text-yellow-500 font-bold text-[10px] flex-shrink-0 mt-0.5">٢</span>
                 <p>
-                  یاخود تەنها کلیک لەسەر دوگمەی ژێرەوە بکە بۆ تێپەڕاندنی خێرا لە ڕێگەی <b className="text-stone-100">ناوی نهێنی مۆدێراتۆر (shea2026)</b> بەبێ پێویستی بە جیمەیڵ.
+                  یاخود تەنها کلیک لەسەر دوگمەی ژێرەوە بکە بۆ تێپەڕاندنی خێرا لە ڕێگەی <b className="text-stone-100">ئومێدی بەکارهێنانی کۆدی نهێنی مۆدێراتۆر</b> بەبێ پێویستی بە جیمەیڵ.
                 </p>
               </div>
             </div>
@@ -400,7 +509,7 @@ export default function App() {
                 }}
                 className="flex-1 rounded-xl bg-yellow-500 py-2.5 text-xs font-bold text-stone-950 hover:bg-yellow-400 hover:shadow-[0_4px_12px_rgba(234,179,8,0.2)] active:scale-95 transition-all"
               >
-                بەکارهێنانی کۆدی کاتی (shea2026)
+                بەکارهێنانی کۆدی مۆدێراتۆر
               </button>
               
               <button
