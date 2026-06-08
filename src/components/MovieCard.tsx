@@ -1,5 +1,5 @@
 import React from "react";
-import { Film, Star, Play } from "lucide-react";
+import { Film, Star, Play, Eye } from "lucide-react";
 import { Movie } from "../types";
 
 export interface MovieCardProps {
@@ -64,7 +64,14 @@ const MovieCard: React.FC<MovieCardProps> = ({ movie, onSelect }) => {
           <span className="font-sans text-stone-500">
             {movie.genre ? movie.genre.split(",")[0] : "دیارینەکراو"}
           </span>
-          <span className="font-mono text-stone-300 font-medium">{movie.year}</span>
+          <div className="flex items-center gap-2">
+            <div className="flex items-center gap-1 text-stone-400" title="بینینەکان">
+              <Eye size={12} className="opacity-60 text-stone-400" />
+              <span className="font-mono text-[10px]">{movie.views || 0}</span>
+            </div>
+            <span className="text-stone-700">•</span>
+            <span className="font-mono text-stone-300 font-medium">{movie.year}</span>
+          </div>
         </div>
       </div>
     </div>

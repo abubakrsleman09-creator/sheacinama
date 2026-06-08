@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { onAuthStateChanged, User as FirebaseUser } from "firebase/auth";
-import { collection, query, orderBy, onSnapshot } from "firebase/firestore";
+import { collection, query, orderBy, onSnapshot, doc, updateDoc, increment } from "firebase/firestore";
 import { auth, signInWithPopup, signOut, googleProvider, db } from "./firebase";
 import { Movie } from "./types";
 import { handleFirestoreError, OperationType } from "./firestoreErrorHandler";
@@ -28,6 +28,21 @@ export default function App() {
   const [bypassInput, setBypassInput] = useState("");
   const [showBypassModal, setShowBypassModal] = useState(false);
   const [showAuthWarning, setShowAuthWarning] = useState(false);
+
+  // Select movie and trigger views increment in Firestore
+  const handleSelectMovie = async (movie: Movie) => {
+    setSelectedMovie(movie);
+    window.scrollTo({ top: 0, behavior: "smooth" });
+
+    try {
+      const movieRef = doc(db, "movies", movie.id);
+      await updateDoc(movieRef, {
+        views: increment(1)
+      });
+    } catch (err) {
+      console.warn("Failed to increment views:", err);
+    }
+  };
 
   // Authenticate Admin based on email (abubakrsleman09@gmail.com)
   useEffect(() => {
@@ -101,6 +116,20 @@ export default function App() {
           const matchedMovie = loadedMovies.find((m) => m.id === movieIdParam);
           if (matchedMovie) {
             setSelectedMovie(matchedMovie);
+            
+            // Increment views on direct URL access (once per session)
+            try {
+              const hasViewed = sessionStorage.getItem(`viewed_${matchedMovie.id}`);
+              if (!hasViewed) {
+                sessionStorage.setItem(`viewed_${matchedMovie.id}`, "true");
+                const movieRef = doc(db, "movies", matchedMovie.id);
+                updateDoc(movieRef, {
+                  views: increment(1)
+                });
+              }
+            } catch (err) {
+              console.warn("Direct link view increment error:", err);
+            }
           }
         }
       },
@@ -409,19 +438,97 @@ export default function App() {
 
                 {/* Grid layout section of films list */}
                 <div className="mx-auto max-w-7xl px-4 md:px-6">
-                  {filteredMovies.length === 0 ? (
-                    <div className="py-24 text-center rounded-2xl border border-dashed border-stone-800">
-                      <span className="text-xs text-stone-500 font-sans">هیچ دۆکۆمێنت یان فیلمێک نەدۆزرایەوە کە لەگەڵ گەڕانەکەت گونجاو بێت.</span>
+                  {searchQuery !== "" || activeCategory !== "هەمووی" ? (
+                    // Default fallback filtered list (active category filtering or search mode)
+                    <div>
+                      {filteredMovies.length === 0 ? (
+                        <div className="py-24 text-center rounded-2xl border border-dashed border-stone-800">
+                          <span className="text-xs text-stone-500 font-sans">هیچ دۆکۆمێنت یان فیلمێک نەدۆزرایەوە کە لەگەڵ گەڕانەکەت گونجاو بێت.</span>
+                        </div>
+                      ) : (
+                        <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 mb-8">
+                          {filteredMovies.map((mov) => (
+                            <MovieCard
+                              key={mov.id}
+                              movie={mov}
+                              onSelect={handleSelectMovie}
+                            />
+                          ))}
+                        </div>
+                      )}
                     </div>
                   ) : (
-                    <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 mb-8">
-                      {filteredMovies.map((mov) => (
-                        <MovieCard
-                          key={mov.id}
-                          movie={mov}
-                          onSelect={(m) => setSelectedMovie(m)}
-                        />
-                      ))}
+                    // Separated sections when displaying HOME ("هەمووی")
+                    <div className="space-y-14 mb-12 text-right rtl-dir">
+                      
+                      {/* Section 1: Latest Movies */}
+                      <div>
+                        <div className="flex items-center justify-between mb-6 border-b border-stone-800 pb-3">
+                          <div className="flex items-center gap-2.5">
+                            <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-yellow-500/10 text-yellow-500 border border-yellow-500/15">
+                              <Film size={18} />
+                            </div>
+                            <div className="text-right">
+                              <h3 className="text-base font-bold text-[#f5f5f7] font-sans">بەشی فیلمە ناوازەکان</h3>
+                              <p className="text-[10px] text-stone-500 font-sans">نوێترین و سەرنجڕاکێشترین فیلمە بڵاوکراوەکان</p>
+                            </div>
+                          </div>
+                          <span className="text-[10px] text-stone-500 font-sans uppercase tracking-widest hidden sm:inline">Movies Section</span>
+                        </div>
+
+                        {movies.filter((m) => m.category !== "زنجیرە").length === 0 ? (
+                          <div className="py-16 text-center rounded-2xl bg-[#0a0a0c] border border-stone-800/60 border-dashed">
+                            <span className="text-xs text-stone-500 font-sans">هیچ فیلمێکی نوێ لەم بەشەدا بەردەست نییە.</span>
+                          </div>
+                        ) : (
+                          <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6">
+                            {movies
+                              .filter((m) => m.category !== "زنجیرە")
+                              .map((mov) => (
+                                <MovieCard
+                                  key={mov.id}
+                                  movie={mov}
+                                  onSelect={handleSelectMovie}
+                                />
+                              ))}
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Section 2: Dedicated TV Series Section */}
+                      <div>
+                        <div className="flex items-center justify-between mb-6 border-b border-stone-800 pb-3">
+                          <div className="flex items-center gap-2.5">
+                            <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-yellow-500/10 text-yellow-500 border border-yellow-500/15 animate-pulse">
+                              <Tv size={18} />
+                            </div>
+                            <div className="text-right">
+                              <h3 className="text-base font-bold text-[#f5f5f7] font-sans">بەشی زنجیرە دراماکان</h3>
+                              <p className="text-[10px] text-stone-500 font-sans">تایبەت بە زنجیرە دراما بەناوبانگە شاهانەییەکان</p>
+                            </div>
+                          </div>
+                          <span className="text-[10px] text-stone-500 font-sans uppercase tracking-widest hidden sm:inline">TV Series Section</span>
+                        </div>
+
+                        {movies.filter((m) => m.category === "زنجیرە").length === 0 ? (
+                          <div className="py-16 text-center rounded-2xl bg-[#0a0a0c] border border-stone-800/60 border-dashed">
+                            <span className="text-xs text-stone-500 font-sans">هیچ زنجیرە درامایەکی نوێ لەم بەشەدا بەردەست نییە.</span>
+                          </div>
+                        ) : (
+                          <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6">
+                            {movies
+                              .filter((m) => m.category === "زنجیرە")
+                              .map((mov) => (
+                                <MovieCard
+                                  key={mov.id}
+                                  movie={mov}
+                                  onSelect={handleSelectMovie}
+                                />
+                              ))}
+                          </div>
+                        )}
+                      </div>
+
                     </div>
                   )}
                 </div>

@@ -3,7 +3,7 @@ import { Plus, Trash2, Edit, Save, PlusCircle, MinusCircle, AlertCircle, Refresh
 import { User as FirebaseUser } from "firebase/auth";
 import { collection, addDoc, updateDoc, deleteDoc, doc, serverTimestamp } from "firebase/firestore";
 import { db } from "../firebase";
-import { Movie, StreamServer } from "../types";
+import { Movie, StreamServer, Season, Episode } from "../types";
 import { handleFirestoreError, OperationType } from "../firestoreErrorHandler";
 
 interface AdminPanelProps {
@@ -41,6 +41,124 @@ export default function AdminPanel({
     { name: "سێرڤەری سەرەکی", url: "" },
   ]);
 
+  // Seasons state for TV series
+  const [seasons, setSeasons] = useState<Season[]>([]);
+
+  // Season / Episode action handlers
+  const handleAddSeason = () => {
+    const newSeasonId = `sn-${Date.now()}-${Math.floor(Math.random() * 1000)}`;
+    const nextNum = (seasons.length + 1).toString();
+    setSeasons([
+      ...seasons,
+      {
+        id: newSeasonId,
+        seasonNumber: nextNum,
+        title: `وەرزی ${nextNum}`,
+        episodes: []
+      }
+    ]);
+  };
+
+  const handleRemoveSeason = (seasonId: string) => {
+    setSeasons(seasons.filter(s => s.id !== seasonId));
+  };
+
+  const handleUpdateSeason = (seasonId: string, field: 'seasonNumber' | 'title', value: string) => {
+    setSeasons(seasons.map(s => s.id === seasonId ? { ...s, [field]: value } : s));
+  };
+
+  const handleAddEpisode = (seasonId: string) => {
+    setSeasons(seasons.map(s => {
+      if (s.id !== seasonId) return s;
+      const nextEpNum = (s.episodes.length + 1).toString();
+      const newEpId = `ep-${Date.now()}-${Math.floor(Math.random() * 1000)}`;
+      return {
+        ...s,
+        episodes: [
+          ...s.episodes,
+          {
+            id: newEpId,
+            episodeNumber: nextEpNum,
+            title: `ئەڵقەی ${nextEpNum}`,
+            servers: [{ id: `srv-${Date.now()}-1`, name: "سێرڤەری سەرەکی", url: "" }]
+          }
+        ]
+      };
+    }));
+  };
+
+  const handleRemoveEpisode = (seasonId: string, episodeId: string) => {
+    setSeasons(seasons.map(s => {
+      if (s.id !== seasonId) return s;
+      return {
+        ...s,
+        episodes: s.episodes.filter(e => e.id !== episodeId)
+      };
+    }));
+  };
+
+  const handleUpdateEpisode = (seasonId: string, episodeId: string, field: 'episodeNumber' | 'title', value: string) => {
+    setSeasons(seasons.map(s => {
+      if (s.id !== seasonId) return s;
+      return {
+        ...s,
+        episodes: s.episodes.map(e => e.id === episodeId ? { ...e, [field]: value } : e)
+      };
+    }));
+  };
+
+  const handleAddEpisodeServer = (seasonId: string, episodeId: string) => {
+    setSeasons(seasons.map(s => {
+      if (s.id !== seasonId) return s;
+      return {
+        ...s,
+        episodes: s.episodes.map(e => {
+          if (e.id !== episodeId) return e;
+          return {
+            ...e,
+            servers: [
+              ...e.servers,
+              { id: `srv-${Date.now()}-${e.servers.length + 1}`, name: `سێرڤەری ${e.servers.length + 1}`, url: "" }
+            ]
+          };
+        })
+      };
+    }));
+  };
+
+  const handleRemoveEpisodeServer = (seasonId: string, episodeId: string, serverId: string) => {
+    setSeasons(seasons.map(s => {
+      if (s.id !== seasonId) return s;
+      return {
+        ...s,
+        episodes: s.episodes.map(e => {
+          if (e.id !== episodeId) return e;
+          if (e.servers.length <= 1) return e;
+          return {
+            ...e,
+            servers: e.servers.filter(srv => srv.id !== serverId)
+          };
+        })
+      };
+    }));
+  };
+
+  const handleUpdateEpisodeServer = (seasonId: string, episodeId: string, serverId: string, field: 'name' | 'url', value: string) => {
+    setSeasons(seasons.map(s => {
+      if (s.id !== seasonId) return s;
+      return {
+        ...s,
+        episodes: s.episodes.map(e => {
+          if (e.id !== episodeId) return e;
+          return {
+            ...e,
+            servers: e.servers.map(srv => srv.id === serverId ? { ...srv, [field]: value } : srv)
+          };
+        })
+      };
+    }));
+  };
+
   // Handle Local image uploads (converts to Base64 data url)
   const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>, target: 'poster' | 'banner') => {
     const file = e.target.files?.[0];
@@ -67,7 +185,7 @@ export default function AdminPanel({
   };
 
   // Reset form
-  const resetForm = () => {
+  const dbResetForm = () => {
     setEditingMovieId(null);
     setTitle("");
     setDescription("");
@@ -79,9 +197,12 @@ export default function AdminPanel({
     setBannerUrl("");
     setIsTrending(false);
     setServers([{ name: "سێرڤەری سەرەکی", url: "" }]);
+    setSeasons([]);
     setErrorMessage("");
     setSuccessMessage("");
   };
+
+  const resetForm = dbResetForm;
 
   // Add Server slot
   const handleAddServerSlot = () => {
@@ -123,6 +244,7 @@ export default function AdminPanel({
         ? movie.servers.map((s) => ({ name: s.name, url: s.url }))
         : [{ name: "سێرڤەری سەرەکی", url: "" }]
     );
+    setSeasons(movie.seasons || []);
     // Smooth scroll to form
     window.scrollTo({ top: 350, behavior: "smooth" });
   };
@@ -171,6 +293,7 @@ export default function AdminPanel({
       posterUrl: posterUrl.trim(),
       bannerUrl: bannerUrl.trim(),
       servers: formattedServers,
+      seasons: category === "زنجیرە" ? seasons : [],
       isTrending: isTrending,
       updatedAt: serverTimestamp(),
     };
@@ -400,61 +523,231 @@ export default function AdminPanel({
               </label>
             </div>
 
-            {/* Dynamic Server Streams Section */}
-            <div className="py-2.5">
-              <div className="flex justify-between items-center mb-3">
-                <button
-                  type="button"
-                  onClick={handleAddServerSlot}
-                  className="text-xs font-semibold text-yellow-400 hover:text-yellow-300 flex items-center gap-1 font-sans"
-                >
-                  <PlusCircle size={15} />
-                  <span>زیادکردنی سێرڤەری تر</span>
-                </button>
-                <h4 className="text-[#c1c1c7] text-xs font-bold font-sans">دیاریکردنی سێرڤەرەکانی دابینکردنی بینین:</h4>
-              </div>
+            {category === "زنجیرە" ? (
+              /* TV Series Seasons & Episodes Interactive Manager */
+              <div className="py-4 border-t border-stone-800">
+                <div className="flex justify-between items-center mb-4">
+                  <button
+                    type="button"
+                    onClick={handleAddSeason}
+                    className="text-xs font-semibold bg-yellow-500/10 text-yellow-400 hover:bg-yellow-500 hover:text-stone-950 border border-yellow-500/20 px-3.5 py-2 rounded-xl flex items-center gap-1.5 transition-all outline-none"
+                  >
+                    <PlusCircle size={15} />
+                    <span>زیادکردنی وەرزی نوێ</span>
+                  </button>
+                  <h4 className="text-yellow-400 text-xs font-bold font-sans">بەڕێوەبردنی سیزن و ئەڵقەکانی زنجیرە:</h4>
+                </div>
 
-              <div className="space-y-3.5 max-h-[220px] overflow-y-auto pr-2 pb-1">
-                {servers.map((server, idx) => (
-                  <div key={idx} className="flex gap-2 items-center p-3 rounded-xl border border-stone-800 bg-stone-900/40 relative">
-                    {/* Delete Server Slot Button */}
-                    <button
-                      type="button"
-                      onClick={() => handleRemoveServerSlot(idx)}
-                      className="text-stone-500 hover:text-red-400 hover:bg-stone-800 p-1 rounded-md"
-                      title="سڕینەوەی ئەم سێرڤەرە"
-                    >
-                      <MinusCircle size={16} />
-                    </button>
+                {seasons.length === 0 ? (
+                  <div className="py-8 text-center rounded-xl border border-dashed border-stone-800 bg-stone-900/10 text-stone-500 text-xs font-sans">
+                    تا ئێستا هیچ وەرزێک دروستنەکراوە. بۆ دەستپێکردن کلیک لە "زیادکردنی وەرزی نوێ" بکە.
+                  </div>
+                ) : (
+                  <div className="space-y-6">
+                    {seasons.map((season, sIdx) => (
+                      <div key={season.id} className="p-4 rounded-xl border border-stone-800 bg-[#141416]/90 space-y-4">
+                        {/* Season Header */}
+                        <div className="flex items-center justify-between gap-3 border-b border-stone-800/80 pb-3">
+                          <button
+                            type="button"
+                            onClick={() => handleRemoveSeason(season.id)}
+                            className="text-red-400 hover:text-red-300 hover:bg-red-500/10 px-2.5 py-1.5 rounded-lg text-[11px] font-sans transition-all flex items-center gap-1"
+                          >
+                            <Trash2 size={13} />
+                            <span>سڕینەوەی ئەم وەرزی {season.seasonNumber}ە</span>
+                          </button>
+                          
+                          <div className="flex items-center gap-2 flex-grow max-w-md justify-end">
+                            <input
+                              type="text"
+                              value={season.title || ""}
+                              placeholder="ناو بۆ نموونە: وەرزی یەکەم"
+                              onChange={(e) => handleUpdateSeason(season.id, 'title', e.target.value)}
+                              className="text-xs rounded-lg border border-stone-800 bg-[#1c1c1f] px-2.5 py-1.5 text-stone-100 text-right focus:outline-none flex-grow"
+                            />
+                            <input
+                              type="text"
+                              required
+                              value={season.seasonNumber}
+                              placeholder="ژمارەی وەرز"
+                              onChange={(e) => handleUpdateSeason(season.id, 'seasonNumber', e.target.value)}
+                              className="w-16 text-xs rounded-lg border border-stone-800 bg-[#1c1c1f] px-2.5 py-1.5 text-center text-stone-100 focus:outline-none font-mono"
+                            />
+                            <span className="text-[#ebebee] text-xs font-bold font-sans">سیزن </span>
+                          </div>
+                        </div>
 
-                    <div className="grid grid-cols-1 gap-2 sm:grid-cols-12 flex-1">
-                      {/* Embed / Iframe Server URL */}
-                      <div className="sm:col-span-8">
-                        <input
-                          type="url"
-                          required
-                          value={server.url}
-                          onChange={(e) => handleServerChange(idx, "url", e.target.value)}
-                          placeholder="بەستەری لایڤ ستریم (یوتوب ئێمبێد یان لایڤ ئایفڕێم)"
-                          className="w-full text-xs rounded-lg border border-stone-800 bg-[#161619] px-2.5 py-1.5 text-stone-100 focus:outline-none"
-                        />
+                        {/* Episodes inside Season */}
+                        <div className="space-y-3 rtl-dir text-right">
+                          <div className="flex justify-between items-center mb-2">
+                            <button
+                              type="button"
+                              onClick={() => handleAddEpisode(season.id)}
+                              className="text-[11px] text-yellow-400 hover:text-yellow-300 flex items-center gap-1 font-sans bg-yellow-500/5 hover:bg-yellow-500/10 border border-yellow-500/10 px-2.5 py-1.5 rounded-lg active:scale-95 transition-all outline-none"
+                            >
+                              <Plus size={13} />
+                              <span>زیادکردنی ئەڵقە</span>
+                            </button>
+                            <span className="text-stone-400 text-xs font-bold">ئەڵقەکانی ناو فیلمەکە:</span>
+                          </div>
+
+                          {season.episodes.length === 0 ? (
+                            <div className="text-center py-4 bg-[#0d0d0f] rounded-lg border border-[#161619] text-stone-500 text-[11px] font-sans">
+                              هیچ ئەڵقەیەک زیادنەکراوە.
+                            </div>
+                          ) : (
+                            <div className="space-y-3 max-h-[400px] overflow-y-auto pr-1">
+                              {season.episodes.map((episode) => (
+                                <div key={episode.id} className="p-3 bg-[#0d0d0f] rounded-xl border border-stone-800 space-y-3">
+                                  {/* Episode Fields */}
+                                  <div className="flex justify-between items-center gap-3">
+                                    <button
+                                      type="button"
+                                      onClick={() => handleRemoveEpisode(season.id, episode.id)}
+                                      className="text-stone-500 hover:text-red-400 hover:bg-red-500/5 p-1 rounded-md transition-all"
+                                      title="سڕینەوەی ئەم ئەڵقەیە"
+                                    >
+                                      <Trash2 size={13} />
+                                    </button>
+
+                                    <div className="flex gap-2 items-center flex-grow max-w-sm justify-end text-right">
+                                      <input
+                                        type="text"
+                                        value={episode.title || ""}
+                                        placeholder="ناونیشانی ئەڵقە (ئارەزوومەندانە)"
+                                        onChange={(e) => handleUpdateEpisode(season.id, episode.id, 'title', e.target.value)}
+                                        className="text-[11px] rounded-lg border border-stone-800 bg-[#161618] px-2 py-1.5 text-stone-100 text-right focus:outline-none flex-grow"
+                                      />
+                                      <input
+                                        type="text"
+                                        required
+                                        value={episode.episodeNumber}
+                                        placeholder="١"
+                                        onChange={(e) => handleUpdateEpisode(season.id, episode.id, 'episodeNumber', e.target.value)}
+                                        className="w-12 text-[11px] rounded-lg border border-stone-800 bg-[#161618] px-1.5 py-1.5 text-center text-stone-100 focus:outline-none font-mono font-bold"
+                                      />
+                                      <span className="text-stone-400 text-xs">ئەڵقەی</span>
+                                    </div>
+                                  </div>
+
+                                  {/* Episode Servers */}
+                                  <div className="mt-2.5 border-t border-[#1a1a1f] pt-2">
+                                    <div className="flex justify-between items-center mb-2">
+                                      <button
+                                        type="button"
+                                        onClick={() => handleAddEpisodeServer(season.id, episode.id)}
+                                        className="text-[10px] text-yellow-400/80 hover:text-yellow-300 flex items-center gap-1 font-sans cursor-pointer"
+                                      >
+                                        <Plus size={11} />
+                                        <span>زیادکردنی سێرڤەر بۆ ئەم ئەڵقەیە</span>
+                                      </button>
+                                      <span className="text-stone-500 text-[10px]">فیدیۆی ئەڵقە:</span>
+                                    </div>
+
+                                    <div className="space-y-2">
+                                      {episode.servers.map((srv) => (
+                                        <div key={srv.id} className="flex gap-1.5 items-center">
+                                          <button
+                                            type="button"
+                                            disabled={episode.servers.length <= 1}
+                                            onClick={() => handleRemoveEpisodeServer(season.id, episode.id, srv.id)}
+                                            className="text-stone-600 hover:text-red-400 hover:bg-stone-800/20 p-1 rounded-md disabled:opacity-35"
+                                            title="سڕینەوەی سێرڤەر"
+                                          >
+                                            <MinusCircle size={13} />
+                                          </button>
+
+                                          <div className="flex gap-2 flex-grow">
+                                            <input
+                                              type="url"
+                                              required
+                                              value={srv.url}
+                                              onChange={(e) => handleUpdateEpisodeServer(season.id, episode.id, srv.id, 'url', e.target.value)}
+                                              placeholder="بەستەری لایڤ ستریم یان ئێمبێدی ئەڵقە"
+                                              className="flex-grow text-[10px] rounded-lg border border-stone-800 bg-[#141416] px-2 py-1 text-stone-100 focus:outline-none"
+                                            />
+                                            <input
+                                              type="text"
+                                              required
+                                              value={srv.name}
+                                              onChange={(e) => handleUpdateEpisodeServer(season.id, episode.id, srv.id, 'name', e.target.value)}
+                                              placeholder="ناوی سێرڤەر"
+                                              className="w-24 text-[10px] rounded-lg border border-stone-800 bg-[#141416] px-1.5 py-1 text-stone-100 text-right focus:outline-none font-sans"
+                                            />
+                                          </div>
+                                        </div>
+                                      ))}
+                                    </div>
+
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+
                       </div>
-                      {/* Server Name */}
-                      <div className="sm:col-span-4">
-                        <input
-                          type="text"
-                          required
-                          value={server.name}
-                          onChange={(e) => handleServerChange(idx, "name", e.target.value)}
-                          placeholder="ناو، بۆ نموونە: Server HD"
-                          className="w-full text-xs rounded-lg border border-stone-800 bg-[#161619] px-2.5 py-1.5 text-stone-100 focus:outline-none text-right"
-                        />
+                    ))}
+                  </div>
+                )}
+              </div>
+            ) : (
+              /* Dynamic Server Streams Section */
+              <div className="py-2.5">
+                <div className="flex justify-between items-center mb-3">
+                  <button
+                    type="button"
+                    onClick={handleAddServerSlot}
+                    className="text-xs font-semibold text-yellow-400 hover:text-yellow-300 flex items-center gap-1 font-sans"
+                  >
+                    <PlusCircle size={15} />
+                    <span>زیادکردنی سێرڤەری تر</span>
+                  </button>
+                  <h4 className="text-[#c1c1c7] text-xs font-bold font-sans">دیاریکردنی سێرڤەرەکانی دابینکردنی بینین:</h4>
+                </div>
+
+                <div className="space-y-3.5 max-h-[220px] overflow-y-auto pr-2 pb-1">
+                  {servers.map((server, idx) => (
+                    <div key={idx} className="flex gap-2 items-center p-3 rounded-xl border border-stone-800 bg-stone-900/40 relative">
+                      {/* Delete Server Slot Button */}
+                      <button
+                        type="button"
+                        onClick={() => handleRemoveServerSlot(idx)}
+                        className="text-stone-500 hover:text-red-400 hover:bg-stone-800 p-1 rounded-md"
+                        title="سڕینەوەی ئەم سێرڤەرە"
+                      >
+                        <MinusCircle size={16} />
+                      </button>
+
+                      <div className="grid grid-cols-1 gap-2 sm:grid-cols-12 flex-1">
+                        {/* Embed / Iframe Server URL */}
+                        <div className="sm:col-span-8">
+                          <input
+                            type="url"
+                            required
+                            value={server.url}
+                            onChange={(e) => handleServerChange(idx, "url", e.target.value)}
+                            placeholder="بەستەری لایڤ ستریم (یوتوب ئێمبێد یان لایڤ ئایفڕێم)"
+                            className="w-full text-xs rounded-lg border border-stone-800 bg-[#161619] px-2.5 py-1.5 text-stone-100 focus:outline-none"
+                          />
+                        </div>
+                        {/* Server Name */}
+                        <div className="sm:col-span-4">
+                          <input
+                            type="text"
+                            required
+                            value={server.name}
+                            onChange={(e) => handleServerChange(idx, "name", e.target.value)}
+                            placeholder="ناو، بۆ نموونە: Server HD"
+                            className="w-full text-xs rounded-lg border border-stone-800 bg-[#161619] px-2.5 py-1.5 text-stone-100 focus:outline-none text-right"
+                          />
+                        </div>
                       </div>
                     </div>
-                  </div>
-                ))}
+                  ))}
+                </div>
               </div>
-            </div>
+            )}
 
             {/* Submit Action buttons */}
             <div className="flex gap-3 pt-3 border-t border-stone-800">

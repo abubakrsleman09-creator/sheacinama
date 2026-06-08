@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { X, Star, Calendar, Bookmark, Eye, Play, Share2, CornerDownLeft, Volume2, Info, Lightbulb, LightbulbOff } from "lucide-react";
-import { Movie, StreamServer } from "../types";
+import { Movie, StreamServer, Season, Episode } from "../types";
 
 interface MovieDetailProps {
   movie: Movie;
@@ -12,14 +12,32 @@ export default function MovieDetail({ movie, onClose }: MovieDetailProps) {
   const [lightsOff, setLightsOff] = useState(false);
   const [copied, setCopied] = useState(false);
 
-  // Auto-select the first stream server if available
+  // TV Series Seasons & Episodes selection states
+  const [activeSeasonIdx, setActiveSeasonIdx] = useState(0);
+  const [activeEpisodeIdx, setActiveEpisodeIdx] = useState(0);
+
+  const hasSeasons = movie.category === "زنجیرە" && movie.seasons && movie.seasons.length > 0;
+  
+  // Get active season & episode
+  const activeSeason = hasSeasons ? movie.seasons![activeSeasonIdx] : null;
+  const activeEpisode = activeSeason && activeSeason.episodes ? activeSeason.episodes[activeEpisodeIdx] : null;
+
+  // Auto-select first server of selected episode OR movie 
   useEffect(() => {
-    if (movie.servers && movie.servers.length > 0) {
-      setSelectedServer(movie.servers[0]);
+    if (hasSeasons) {
+      if (activeEpisode && activeEpisode.servers && activeEpisode.servers.length > 0) {
+        setSelectedServer(activeEpisode.servers[0]);
+      } else {
+        setSelectedServer(null);
+      }
     } else {
-      setSelectedServer(null);
+      if (movie.servers && movie.servers.length > 0) {
+        setSelectedServer(movie.servers[0]);
+      } else {
+        setSelectedServer(null);
+      }
     }
-  }, [movie]);
+  }, [movie, activeSeasonIdx, activeEpisodeIdx, hasSeasons, activeEpisode]);
 
   const handleShareClick = () => {
     // Generate a shareable URL incorporating the movie ID
@@ -108,6 +126,13 @@ export default function MovieDetail({ movie, onClose }: MovieDetailProps) {
                     {movie.rating ? `${movie.rating} / 10` : "نەزانراو"}
                   </span>
                 </div>
+                <div className="flex justify-between border-b border-stone-800 pb-2">
+                  <span className="text-stone-400 text-xs">بینینەکان</span>
+                  <span className="text-stone-100 text-xs flex items-center gap-1.5 font-mono">
+                    <Eye size={12} className="text-stone-400" />
+                    {movie.views ? `${movie.views} جار بینراوە` : "٠ بینەر"}
+                  </span>
+                </div>
                 <div className="flex justify-between">
                   <span className="text-stone-400 text-xs font-sans">هاوپۆل</span>
                   <span className="text-stone-100 text-xs font-sans">{movie.genre || "دیارینەکراو"}</span>
@@ -172,7 +197,7 @@ export default function MovieDetail({ movie, onClose }: MovieDetailProps) {
                 <div className="aspect-video w-full bg-black relative">
                   <iframe
                     src={selectedServer.url}
-                    title={`${movie.title} - ${selectedServer.name}`}
+                    title={hasSeasons && activeSeason && activeEpisode ? `${movie.title} - ${activeSeason.title || `سیزن ${activeSeason.seasonNumber}`} - ${activeEpisode.title || `ئەڵقەی ${activeEpisode.episodeNumber}`} - ${selectedServer.name}` : `${movie.title} - ${selectedServer.name}`}
                     allowFullScreen={true}
                     referrerPolicy="no-referrer"
                     className="absolute inset-0 h-full w-full border-0 bg-black"
@@ -207,18 +232,86 @@ export default function MovieDetail({ movie, onClose }: MovieDetailProps) {
               )}
             </div>
 
+            {/* Seasons Selection */}
+            {hasSeasons && (
+              <div className="rounded-2xl border border-stone-800 bg-[#0d0d0f] p-5">
+                <h3 className="text-stone-300 text-xs font-bold font-sans mb-3 text-right">
+                  وەرزی زنجیرەکە هەڵبژێرە:
+                </h3>
+                <div className="flex flex-wrap gap-2 justify-start">
+                  {movie.seasons!.map((season, idx) => (
+                    <button
+                      key={season.id || idx}
+                      onClick={() => {
+                        setActiveSeasonIdx(idx);
+                        setActiveEpisodeIdx(0);
+                      }}
+                      className={`px-4 py-2.5 text-xs font-bold font-sans rounded-xl border transition-all duration-200 cursor-pointer ${
+                        activeSeasonIdx === idx
+                          ? "bg-stone-100 text-stone-950 border-stone-100"
+                          : "bg-[#141417] border-stone-800 text-stone-300 hover:border-stone-700 hover:bg-[#18181c]"
+                      }`}
+                    >
+                      {season.title || `سیزن ${season.seasonNumber}`}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Episodes Selection */}
+            {hasSeasons && activeSeason && activeSeason.episodes && activeSeason.episodes.length > 0 && (
+              <div className="rounded-2xl border border-stone-800 bg-[#0d0d0f] p-5">
+                <div className="flex justify-between items-center mb-3">
+                  <span className="text-stone-500 font-mono text-[10px]">
+                    {activeSeason.episodes.length} ئەڵقە بەردەستە
+                  </span>
+                  <h3 className="text-stone-300 text-xs font-bold font-sans text-right">
+                    ئەڵقەکان:
+                  </h3>
+                </div>
+                <div className="grid grid-cols-3 gap-2 sm:grid-cols-4 md:grid-cols-6 lg:grid-cols-8 justify-start">
+                  {activeSeason.episodes.map((episode, idx) => (
+                    <button
+                      key={episode.id || idx}
+                      onClick={() => {
+                        setActiveEpisodeIdx(idx);
+                      }}
+                      className={`py-3 text-xs font-bold font-mono rounded-xl border transition-all duration-200 flex flex-col items-center justify-center gap-1 cursor-pointer ${
+                        activeEpisodeIdx === idx
+                          ? "bg-yellow-500 text-stone-950 border-yellow-500 shadow-[0_4px_12px_rgba(234,179,8,0.25)]"
+                          : "bg-[#141417] border-stone-800 text-stone-300 hover:border-stone-700 hover:bg-[#18181c]"
+                      }`}
+                    >
+                      <span className="text-[9px] opacity-70 uppercase font-sans">Ep</span>
+                      <span className="text-sm font-black">{episode.episodeNumber}</span>
+                    </button>
+                  ))}
+                </div>
+                
+                {activeEpisode && activeEpisode.title && (
+                  <div className="mt-3.5 text-xs font-sans text-stone-400 border-t border-stone-800/40 pt-2.5 flex items-center gap-2 justify-start">
+                    <span className="rounded bg-yellow-500/10 border border-yellow-500/20 px-1.5 py-0.5 text-yellow-500 text-[9px]">چالاک</span>
+                    <span className="text-stone-500 text-[10px]">ناوی ئەڵقە:</span>
+                    <span className="text-stone-200 font-bold">{activeEpisode.title}</span>
+                  </div>
+                )}
+              </div>
+            )}
+
             {/* Streaming Server Selector (Dynamic and Interactive) */}
-            {movie.servers && movie.servers.length > 0 && (
+            {((hasSeasons && activeEpisode && activeEpisode.servers && activeEpisode.servers.length > 0) || 
+              (!hasSeasons && movie.servers && movie.servers.length > 0)) && (
               <div className="rounded-2xl border border-stone-800 bg-[#0c0c0e] p-5">
                 <h3 className="text-stone-300 text-xs font-bold font-sans mb-3 text-right">
-                  لستى سێرڤەرەکانی پەخشکردن (سێرڤەری کارا دیاریبکە):
+                  لیستی سێرڤەرەکانی دابینکردنی پەخشکردن:
                 </h3>
                 <div className="flex flex-wrap gap-2.5 justify-start">
-                  {movie.servers.map((server) => (
+                  {(hasSeasons ? activeEpisode!.servers : movie.servers).map((server) => (
                     <button
                       key={server.id}
                       onClick={() => setSelectedServer(server)}
-                      className={`flex items-center gap-2 rounded-xl px-4 py-2.5 text-xs font-semibold font-sans transition-all active:scale-95 duration-200 ${
+                      className={`flex items-center gap-2 rounded-xl px-4 py-2.5 text-xs font-semibold font-sans transition-all active:scale-95 duration-200 cursor-pointer ${
                         selectedServer?.id === server.id
                           ? "bg-yellow-500 text-stone-950 shadow-[0_4px_12px_rgba(234,179,8,0.25)]"
                           : "bg-[#141417] border border-stone-800 text-stone-300 hover:border-stone-700 hover:bg-[#18181c]"

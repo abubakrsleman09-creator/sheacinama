@@ -18,6 +18,7 @@
           "description": "List of video hosting/streaming servers"
         },
         "isTrending": { "type": "boolean", "description": "Flag to mark the movie as trending" },
+        "views": { "type": "integer", "description": "Number of clicked sessions or movie views" },
         "createdAt": { "type": "string", "format": "date-time", "description": "Database insertion timestamp" },
         "updatedAt": { "type": "string", "format": "date-time", "description": "Database modification timestamp" }
       },

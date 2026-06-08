@@ -11,10 +11,16 @@ service cloud.firestore {
       // Anyone can view movies (get and list) to keep the frontend public and fast
       allow read: if true;
 
-      // Only the authenticated site administrator (user: abubakrsleman09@gmail.com) can write movies
-      allow create, update, delete: if request.auth != null && 
+      // Only the authenticated site administrator can create or delete
+      allow create, delete: if request.auth != null && 
         request.auth.token.email == "abubakrsleman09@gmail.com" && 
         request.auth.token.email_verified == true;
+
+      // Site administrator can update anything, other users can ONLY update the 'views' field for view counters
+      allow update: if (request.auth != null && 
+        request.auth.token.email == "abubakrsleman09@gmail.com" && 
+        request.auth.token.email_verified == true) || 
+        (request.resource.data.diff(resource.data).affectedKeys().hasOnly(['views']));
     }
   }
 }
