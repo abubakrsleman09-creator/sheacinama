@@ -1,77 +1,35 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
-    // Default deny
-    match /{document=**} {
-      allow read, write: if false;
-    }
 
-    // Helpers
-    function isSignedIn() {
-      return request.auth != null;
-    }
-
-    function isOwner(userId) {
-      return isSignedIn() && request.auth.uid == userId;
-    }
-
-    function isValidId(id) {
-      return id is string && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
-    }
-
-    function isAdmin() {
-      return isSignedIn() && (
-        exists(/databases/$(database)/documents/admins/$(request.auth.uid)) ||
-        (request.auth.token != null && request.auth.token.email != null && request.auth.token.email.lower() == 'abubakrsleman4@gmail.com')
-      );
-    }
-
-    // User Rules
-    match /users/{userId} {
-      allow get: if isOwner(userId);
-      allow create: if isOwner(userId)
-        && request.resource.data.keys().hasAll(['uid', 'email', 'createdAt'])
-        && request.resource.data.uid == request.auth.uid;
-      allow update: if isOwner(userId)
-        && request.resource.data.uid == resource.data.uid;
-    }
-
-    // Admin Rules
-    match /admins/{adminId} {
-      allow read: if isSignedIn();
-      allow write: if isSignedIn() && (
-        request.auth.token != null && request.auth.token.email != null && request.auth.token.email.lower() == 'abubakrsleman4@gmail.com'
-      );
-    }
-
-    // Movie Rules
+    // Movies Collection Rules
     match /movies/{movieId} {
-      allow read: if true; 
-      allow write: if isAdmin();
+      // Anyone can view movies (get and list) to keep the frontend public and fast
+      allow read: if true;
 
-      match /reviews/{reviewId} {
-        allow read: if true;
-        allow create: if isSignedIn() 
-          && request.resource.data.userId == request.auth.uid
-          && request.resource.data.keys().hasAll(['userId', 'userName', 'rating', 'comment', 'createdAt'])
-          && request.resource.data.comment is string && request.resource.data.comment.size() <= 1000
-          && request.resource.data.rating is number && request.resource.data.rating >= 0 && request.resource.data.rating <= 10;
-        allow delete: if isAdmin() || (isSignedIn() && resource.data.userId == request.auth.uid);
-      }
+      // Only the authenticated site administrator can create or delete
+      allow create, delete: if request.auth != null && 
+        request.auth.token.email == "abubakrsleman09@gmail.com";
+
+      // Site administrator can update anything, other users can ONLY update the 'views' field for view counters
+      allow update: if (request.auth != null && 
+        request.auth.token.email == "abubakrsleman09@gmail.com") || 
+        (request.resource.data.diff(resource.data).affectedKeys().hasOnly(['views']));
     }
 
-    // Requests Rules
-    match /requests/{requestId} {
-      allow read: if isAdmin();
-      allow update, delete: if isAdmin();
-      allow create: if request.resource.data.keys().hasAll(['userId', 'email', 'movieTitle', 'note', 'status', 'requestedAt'])
-        && request.resource.data.movieTitle is string && request.resource.data.movieTitle.size() <= 200
-        && request.resource.data.note is string && request.resource.data.note.size() <= 1000
-        && request.resource.data.status == 'pending'
-        && (
-          (request.resource.data.userId == 'guest' && request.resource.data.email == 'anonymous@sheacinema.com') ||
-          (isSignedIn() && request.resource.data.userId == request.auth.uid)
-        );
+    // Comments & Reviews Rules
+    match /comments/{commentId} {
+      allow read, write: if true;
+    }
+
+    // Favorites Rules
+    match /favorites/{favId} {
+      allow read, write: if true;
+    }
+
+    // Watchlist Rules
+    match /watchlist/{watchId} {
+      allow read, write: if true;
     }
   }
 }

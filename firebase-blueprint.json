@@ -1,127 +1,84 @@
 {
   "entities": {
-    "User": {
-      "title": "User",
-      "description": "User profile information",
-      "type": "object",
-      "properties": {
-        "uid": { "type": "string" },
-        "email": { "type": "string", "format": "email" },
-        "displayName": { "type": "string" },
-        "photoURL": { "type": "string" },
-        "favorites": { "type": "array", "items": { "type": "string" } },
-        "watchHistory": {
-          "type": "array",
-          "items": {
-            "type": "object",
-            "properties": {
-              "movieId": { "type": "string" },
-              "watchedAt": { "type": "string", "format": "date-time" },
-              "progress": { "type": "number" }
-            }
-          }
-        },
-        "notifications": {
-          "type": "array",
-          "items": {
-            "type": "object",
-            "properties": {
-              "id": { "type": "string" },
-              "title": { "type": "string" },
-              "message": { "type": "string" },
-              "read": { "type": "boolean" },
-              "createdAt": { "type": "string", "format": "date-time" }
-            }
-          }
-        },
-        "createdAt": { "type": "string", "format": "date-time" }
-      },
-      "required": ["uid", "email"]
-    },
     "Movie": {
       "title": "Movie",
-      "description": "Information about a movie or series",
+      "description": "Represents a movie or TV show with multiple video streaming servers",
       "type": "object",
       "properties": {
-        "titleKu": { "type": "string" },
-        "titleEn": { "type": "string" },
-        "description": { "type": "string" },
-        "posterUrl": { "type": "string" },
-        "bannerUrl": { "type": "string" },
-        "videoQuality": {
+        "title": { "type": "string", "description": "The title of the movie" },
+        "description": { "type": "string", "description": "Brief summary or description of the movie" },
+        "year": { "type": "string", "description": "The release year of the movie" },
+        "category": { "type": "string", "description": "Category: Movie, Series, Anime, etc." },
+        "genre": { "type": "string", "description": "Genre tags of the movie" },
+        "rating": { "type": "string", "description": "IMDb rating or viewer rating" },
+        "posterUrl": { "type": "string", "description": "The URL of the movie poster image" },
+        "bannerUrl": { "type": "string", "description": "An optional banner image URL for the movie detail page header" },
+        "servers": {
           "type": "array",
-          "items": {
-            "type": "object",
-            "properties": {
-              "label": { "type": "string" },
-              "url": { "type": "string" }
-            }
-          }
+          "description": "List of video hosting/streaming servers"
         },
-        "subtitles": {
-          "type": "array",
-          "items": {
-            "type": "object",
-            "properties": {
-              "label": { "type": "string" },
-              "lang": { "type": "string" },
-              "url": { "type": "string" }
-            }
-          }
-        },
-        "category": { "type": "string", "enum": ["Action", "Drama", "Kurdish", "Comedy", "Horror", "Documentary"] },
-        "rating": { "type": "number" },
-        "year": { "type": "integer" },
-        "duration": { "type": "string" },
-        "isDrama": { "type": "boolean" },
-        "cast": {
-          "type": "array",
-          "items": {
-            "type": "object",
-            "properties": {
-              "name": { "type": "string" },
-              "role": { "type": "string" },
-              "imageUrl": { "type": "string" }
-            }
-          }
-        },
-        "createdAt": { "type": "string", "format": "date-time" }
+        "isTrending": { "type": "boolean", "description": "Flag to mark the movie as trending" },
+        "views": { "type": "integer", "description": "Number of clicked sessions or movie views" },
+        "createdAt": { "type": "string", "format": "date-time", "description": "Database insertion timestamp" },
+        "updatedAt": { "type": "string", "format": "date-time", "description": "Database modification timestamp" }
       },
-      "required": ["titleKu", "posterUrl"]
+      "required": ["title", "category", "posterUrl"]
+    },
+    "Comment": {
+      "title": "Comment",
+      "description": "Represents a movie review or comment from an authenticated user",
+      "type": "object",
+      "properties": {
+        "movieId": { "type": "string", "description": "The ID of the target movie" },
+        "userId": { "type": "string", "description": "The author's user ID" },
+        "userName": { "type": "string", "description": "Display name of the user" },
+        "userEmail": { "type": "string", "description": "Email address of the user" },
+        "userPhoto": { "type": "string", "description": "Profile picture URL of the user" },
+        "text": { "type": "string", "description": "Text content of the comment" },
+        "rating": { "type": "integer", "description": "Rating score out of 5 stars" },
+        "createdAt": { "type": "string", "format": "date-time", "description": "Database insertion timestamp" }
+      },
+      "required": ["movieId", "userId", "text", "rating"]
+    },
+    "Favorite": {
+      "title": "Favorite",
+      "description": "Indicates a bookmarked or favorited movie linked to a user profile",
+      "type": "object",
+      "properties": {
+        "movieId": { "type": "string" },
+        "userId": { "type": "string" },
+        "createdAt": { "type": "string" }
+      },
+      "required": ["movieId", "userId"]
+    },
+    "Watchlist": {
+      "title": "Watchlist",
+      "description": "Represents a movie in a user's watch list for later viewing",
+      "type": "object",
+      "properties": {
+        "movieId": { "type": "string" },
+        "userId": { "type": "string" },
+        "createdAt": { "type": "string" }
+      },
+      "required": ["movieId", "userId"]
     }
   },
   "firestore": {
-    "users/{userId}": {
-      "schema": "User",
-      "description": "Collection of user profiles"
-    },
-    "movies/{movieId}": {
+    "/movies/{movieId}": {
       "schema": "Movie",
-      "description": "Collection of movies and dramas"
+      "description": "The movies and series collection managed by the site admin"
     },
-    "admins/{adminId}": {
-      "schema": {
-        "type": "object",
-        "properties": {
-          "email": { "type": "string" },
-          "addedAt": { "type": "string", "format": "date-time" }
-        }
-      },
-      "description": "Collection of admin users"
+    "/comments/{commentId}": {
+      "schema": "Comment",
+      "description": "Reviews and comments posted on movies"
     },
-    "movies/{movieId}/reviews/{reviewId}": {
-      "schema": {
-        "type": "object",
-        "properties": {
-          "userId": { "type": "string" },
-          "userName": { "type": "string" },
-          "userPhoto": { "type": "string" },
-          "rating": { "type": "number" },
-          "comment": { "type": "string" },
-          "createdAt": { "type": "string", "format": "date-time" }
-        }
-      },
-      "description": "Reviews for a specific movie"
+    "/favorites/{favId}": {
+      "schema": "Favorite",
+      "description": "Saved favorite items of registered users"
+    },
+    "/watchlist/{watchId}": {
+      "schema": "Watchlist",
+      "description": "List of pending items to watch later"
     }
   }
 }

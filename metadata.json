@@ -1,6 +1,6 @@
 {
   "name": "Shea Cinema",
-  "description": "A premium Kurdish movie and drama streaming platform with subtitles and high-quality playback.",
+  "description": "پلاتفۆرمی فەرمی بۆ بینینی فیلم و زنجیرەکان بە نوێترین شێوازی مۆدێرن و خێرا",
   "requestFramePermissions": [],
-  "majorCapabilities": []
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
 }
