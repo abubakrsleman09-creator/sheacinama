@@ -1,12 +1,15 @@
-import { useState } from "react";
-import { Film, Send, LogIn, LogOut, User, Activity } from "lucide-react";
+import { useState, useRef, useEffect } from "react";
+import { Film, Send, LogIn, LogOut, User, Activity, Settings, ChevronDown } from "lucide-react";
 import { User as FirebaseUser } from "firebase/auth";
 
 interface NavbarProps {
   user: FirebaseUser | null;
+  customPhotoURL?: string | null;
+  customDisplayName?: string | null;
   isAdmin: boolean;
   onLoginClick: () => void;
   onLogoutClick: () => void;
+  onEditProfileClick: () => void;
   onAdminPanelToggle: () => void;
   showAdminPanel: boolean;
   searchQuery: string;
@@ -15,14 +18,32 @@ interface NavbarProps {
 
 export default function Navbar({
   user,
+  customPhotoURL,
+  customDisplayName,
   isAdmin,
   onLoginClick,
   onLogoutClick,
+  onEditProfileClick,
   onAdminPanelToggle,
   showAdminPanel,
   searchQuery,
   setSearchQuery,
 }: NavbarProps) {
+  const [isMenuOpen, setIsMenuOpen] = useState(false);
+  const dropdownRef = useRef<HTMLDivElement>(null);
+
+  // Close dropdown when clicking outside
+  useEffect(() => {
+    function handleClickOutside(event: MouseEvent) {
+      if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
+        setIsMenuOpen(false);
+      }
+    }
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => {
+      document.removeEventListener("mousedown", handleClickOutside);
+    };
+  }, []);
   return (
     <header className="sticky top-0 z-50 w-full border-b border-stone-800 bg-[#0c0c0d]/90 backdrop-blur-md">
       <div className="mx-auto flex max-w-7xl items-center justify-between px-4 py-4 md:px-6">
@@ -110,30 +131,60 @@ export default function Navbar({
 
           {/* User auth state */}
           {user ? (
-            <div className="flex items-center gap-2 pl-1 border-l border-stone-800">
-              <div className="relative group">
-                <button
-                  onClick={onLogoutClick}
-                  title="دەرچوون"
-                  className="flex h-9 w-9 items-center justify-center rounded-full bg-stone-900 border border-stone-800 text-stone-400 transition-all hover:border-red-500/40 hover:text-red-400"
-                >
-                  {user.photoURL ? (
-                    <img
-                      src={user.photoURL}
-                      alt="avatar"
-                      className="h-8 w-8 rounded-full"
-                      referrerPolicy="no-referrer"
-                    />
-                  ) : (
-                    <User size={16} />
-                  )}
-                  {/* Subtle logout badge on hover */}
-                  <div className="absolute top-10 right-0 hidden group-hover:flex items-center gap-1 rounded bg-stone-900 px-2.5 py-1 text-[10px] text-red-400 shadow-md border border-stone-800 whitespace-nowrap">
-                    <LogOut size={10} />
-                    <span>دەرچوون</span>
+            <div className="relative" ref={dropdownRef}>
+              <button
+                onClick={() => setIsMenuOpen(!isMenuOpen)}
+                className="flex items-center gap-1.5 rounded-full border border-stone-800 bg-[#121214] pl-2 pr-3 py-1.5 text-xs text-stone-300 transition-all hover:bg-stone-900 hover:text-white"
+              >
+                <ChevronDown size={14} className={`text-stone-500 transition-transform ${isMenuOpen ? "rotate-180" : ""}`} />
+                <span className="max-w-[70px] truncate font-sans font-medium">{customDisplayName || user.displayName || "بەکارهێنەر"}</span>
+                {customPhotoURL || (user.photoURL && user.photoURL !== "/custom_avatar") ? (
+                  <img
+                    src={customPhotoURL || user.photoURL || undefined}
+                    alt="avatar"
+                    className="h-6 w-6 rounded-full border border-yellow-500/30"
+                    referrerPolicy="no-referrer"
+                  />
+                ) : (
+                  <div className="flex h-6 w-6 items-center justify-center rounded-full bg-stone-800 text-stone-400">
+                    <User size={12} />
                   </div>
-                </button>
-              </div>
+                )}
+              </button>
+
+              {/* Dropdown Menu */}
+              {isMenuOpen && (
+                <div className="absolute left-0 mt-2 w-56 origin-top-left rounded-xl border border-stone-800 bg-[#0c0c0d] p-1.5 shadow-2xl ring-1 ring-black/5 focus:outline-none z-50 text-right">
+                  {/* User info head */}
+                  <div className="px-3 py-2.5 border-b border-stone-850 mb-1">
+                    <p className="text-xs font-semibold text-white font-sans truncate">{customDisplayName || user.displayName || "بەکارهێنەر"}</p>
+                    <p className="text-[10px] text-stone-500 font-mono truncate mt-0.5">{user.email}</p>
+                  </div>
+
+                  {/* Actions */}
+                  <button
+                    onClick={() => {
+                      onEditProfileClick();
+                      setIsMenuOpen(false);
+                    }}
+                    className="flex w-full items-center justify-end gap-2.5 rounded-lg px-3 py-2 text-right text-xs text-stone-300 hover:bg-stone-900 hover:text-yellow-400 transition-colors font-sans"
+                  >
+                    <span>ڕێکخستنەکانی ئەکاونت</span>
+                    <Settings size={14} />
+                  </button>
+
+                  <button
+                    onClick={() => {
+                      onLogoutClick();
+                      setIsMenuOpen(false);
+                    }}
+                    className="flex w-full items-center justify-end gap-2.5 rounded-lg px-3 py-2 text-right text-xs text-red-400 hover:bg-red-500/10 transition-colors font-sans"
+                  >
+                    <span>دەرچوون لە ئەکاونت</span>
+                    <LogOut size={14} />
+                  </button>
+                </div>
+              )}
             </div>
           ) : (
             <button

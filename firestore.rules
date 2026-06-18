@@ -31,5 +31,15 @@ service cloud.firestore {
     match /watchlist/{watchId} {
       allow read, write: if true;
     }
+
+    // Profiles Rules
+    match /profiles/{profileId} {
+      allow read, write: if true;
+    }
+
+    // Watch History Rules
+    match /watch_history/{historyId} {
+      allow read, write: if true;
+    }
   }
 }

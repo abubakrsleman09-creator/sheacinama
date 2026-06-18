@@ -11,12 +11,15 @@ import MovieCard from "./components/MovieCard";
 import MovieDetail from "./components/MovieDetail";
 import AdminPanel from "./components/AdminPanel";
 import AuthModal from "./components/AuthModal";
+import EditProfileModal from "./components/EditProfileModal";
 
 // Import visual assets / vector components
 import { Film, Send, Sparkles, LogIn, Star, Play, CheckCircle2, Tv, RefreshCw, Key, AlertCircle, ChevronLeft, ChevronRight, Heart, Bookmark } from "lucide-react";
 
 export default function App() {
   const [user, setUser] = useState<FirebaseUser | null>(null);
+  const [customPhotoURL, setCustomPhotoURL] = useState<string | null>(null);
+  const [customDisplayName, setCustomDisplayName] = useState<string | null>(null);
   const [isAdmin, setIsAdmin] = useState(false);
   const [movies, setMovies] = useState<Movie[]>([]);
   const [searchQuery, setSearchQuery] = useState("");
@@ -24,6 +27,7 @@ export default function App() {
   const [showAdminPanel, setShowAdminPanel] = useState(false);
   const [activeCategory, setActiveCategory] = useState<string>("هەمووی");
   const [isLoding, setIsLoading] = useState(true);
+  const [isEditProfileOpen, setIsEditProfileOpen] = useState(false);
 
   // User list states
   const [favoriteIds, setFavoriteIds] = useState<string[]>([]);
@@ -64,6 +68,39 @@ export default function App() {
     });
     return () => unsubscribe();
   }, []);
+
+  // Real-time synchronization for custom user profile from Firestore
+  useEffect(() => {
+    if (!user) {
+      setCustomPhotoURL(null);
+      setCustomDisplayName(null);
+      return;
+    }
+
+    const profileRef = doc(db, "profiles", user.uid);
+    const unsubProfile = onSnapshot(profileRef, (docSnap) => {
+      if (docSnap.exists()) {
+        const d = docSnap.data();
+        if (d.photoURL) {
+          setCustomPhotoURL(d.photoURL);
+        } else {
+          setCustomPhotoURL(null);
+        }
+        if (d.displayName) {
+          setCustomDisplayName(d.displayName);
+        } else {
+          setCustomDisplayName(null);
+        }
+      } else {
+        setCustomPhotoURL(null);
+        setCustomDisplayName(null);
+      }
+    }, (err) => {
+      console.warn("Error getting real-time profile config:", err);
+    });
+
+    return () => unsubProfile();
+  }, [user]);
 
   // Real-time synchronization for Favorites & Watchlist of authenticated user
   useEffect(() => {
@@ -328,9 +365,12 @@ export default function App() {
       {/* Interactive Navigation bar */}
       <Navbar
         user={user}
+        customPhotoURL={customPhotoURL}
+        customDisplayName={customDisplayName}
         isAdmin={isAdmin}
         onLoginClick={handleLogin}
         onLogoutClick={handleLogout}
+        onEditProfileClick={() => setIsEditProfileOpen(true)}
         onAdminPanelToggle={() => setShowAdminPanel(!showAdminPanel)}
         showAdminPanel={showAdminPanel}
         searchQuery={searchQuery}
@@ -355,6 +395,8 @@ export default function App() {
           <MovieDetail
             movie={selectedMovie}
             user={user}
+            customPhotoURL={customPhotoURL}
+            customDisplayName={customDisplayName}
             favoriteIds={favoriteIds}
             watchlistIds={watchlistIds}
             onToggleFavorite={handleToggleFavorite}
@@ -687,6 +729,29 @@ export default function App() {
         isOpen={isAuthModalOpen}
         onClose={() => setIsAuthModalOpen(false)}
         onSuccess={() => {}}
+      />
+
+      {/* Edit Profile Modal */}
+      <EditProfileModal
+        isOpen={isEditProfileOpen}
+        onClose={() => setIsEditProfileOpen(false)}
+        user={user}
+        customPhotoURL={customPhotoURL}
+        onProfileUpdated={async () => {
+          if (auth.currentUser) {
+            try {
+              await auth.currentUser.reload();
+            } catch (e) {
+              console.warn("Failed to reload user profile:", e);
+            }
+            setUser(null);
+            setTimeout(() => {
+              if (auth.currentUser) {
+                setUser(auth.currentUser);
+              }
+            }, 10);
+          }
+        }}
       />
 
       {/* Developer testing bypass modal */}

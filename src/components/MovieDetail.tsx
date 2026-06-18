@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from "react";
-import { X, Star, Calendar, Bookmark, Eye, Play, Share2, CornerDownLeft, Volume2, Info, Lightbulb, LightbulbOff, Heart, Trash, MessageSquare, Send, User, RotateCw } from "lucide-react";
+import { X, Star, Calendar, Bookmark, Eye, Play, Share2, CornerDownLeft, Volume2, Info, Lightbulb, LightbulbOff, Heart, Trash, MessageSquare, Send, User, RotateCw, Pencil } from "lucide-react";
 import { User as FirebaseUser } from "firebase/auth";
-import { collection, query, where, orderBy, onSnapshot, addDoc, serverTimestamp, deleteDoc, doc } from "firebase/firestore";
+import { collection, query, where, orderBy, onSnapshot, addDoc, serverTimestamp, deleteDoc, doc, setDoc, updateDoc } from "firebase/firestore";
 import { db } from "../firebase";
 import { Movie, StreamServer, Season, Episode } from "../types";
 import { handleFirestoreError, OperationType } from "../firestoreErrorHandler";
@@ -10,6 +10,8 @@ interface MovieDetailProps {
   movie: Movie;
   onClose: () => void;
   user: FirebaseUser | null;
+  customPhotoURL?: string | null;
+  customDisplayName?: string | null;
   favoriteIds: string[];
   watchlistIds: string[];
   onToggleFavorite: (movieId: string) => Promise<void>;
@@ -21,6 +23,8 @@ export default function MovieDetail({
   movie,
   onClose,
   user,
+  customPhotoURL,
+  customDisplayName,
   favoriteIds,
   watchlistIds,
   onToggleFavorite,
@@ -30,6 +34,21 @@ export default function MovieDetail({
   const [selectedServer, setSelectedServer] = useState<StreamServer | null>(null);
   const [lightsOff, setLightsOff] = useState(false);
   const [copied, setCopied] = useState(false);
+  const [cinemaPreset, setCinemaPreset] = useState<"noir" | "neon" | "ember" | "gold">("noir");
+
+  const getPresetOverlayClass = () => {
+    switch (cinemaPreset) {
+      case "neon":
+        return "bg-[#030611]/99 shadow-[inset_0_0_160px_rgba(14,165,233,0.22)]";
+      case "ember":
+        return "bg-[#0a0401]/99 shadow-[inset_0_0_160px_rgba(249,115,22,0.18)]";
+      case "gold":
+        return "bg-[#0a0701]/99 shadow-[inset_0_0_160px_rgba(234,179,8,0.21)]";
+      case "noir":
+      default:
+        return "bg-black/98";
+    }
+  };
 
   // TV Series Seasons & Episodes selection states
   const [activeSeasonIdx, setActiveSeasonIdx] = useState(0);
@@ -41,6 +60,11 @@ export default function MovieDetail({
   const [commentRating, setCommentRating] = useState(5); // Default 5 stars
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isLoadingComments, setIsLoadingComments] = useState(true);
+
+  // Edit comment states
+  const [editingCommentId, setEditingCommentId] = useState<string | null>(null);
+  const [editingCommentText, setEditingCommentText] = useState("");
+  const [editingCommentRating, setEditingCommentRating] = useState(5);
 
   // Fetch comments for this specific movie in real-time
   useEffect(() => {
@@ -92,9 +116,9 @@ export default function MovieDetail({
       await addDoc(collection(db, "comments"), {
         movieId: movie.id,
         userId: user.uid,
-        userName: user.displayName || "بینەری ناونیشان",
+        userName: customDisplayName || user.displayName || "بینەری ناونیشان",
         userEmail: user.email || "",
-        userPhoto: user.photoURL || "",
+        userPhoto: customPhotoURL || (user.photoURL === "/custom_avatar" ? "" : user.photoURL) || "",
         text: commentText.trim(),
         rating: commentRating,
         createdAt: serverTimestamp()
@@ -129,6 +153,22 @@ export default function MovieDetail({
     }
   };
 
+  // Handle updating an existing comment/rating
+  const handleCommentUpdate = async (commentId: string) => {
+    if (editingCommentText.trim().length === 0) return;
+    try {
+      await updateDoc(doc(db, "comments", commentId), {
+        text: editingCommentText.trim(),
+        rating: editingCommentRating,
+        updatedAt: serverTimestamp()
+      });
+      setEditingCommentId(null);
+      setEditingCommentText("");
+    } catch (err) {
+      handleFirestoreError(err, OperationType.UPDATE, `comments/${commentId}`);
+    }
+  };
+
   const hasSeasons = movie.category === "زنجیرە" && movie.seasons && movie.seasons.length > 0;
   
   // Get active season & episode
@@ -151,6 +191,33 @@ export default function MovieDetail({
       }
     }
   }, [movie, activeSeasonIdx, activeEpisodeIdx, hasSeasons, activeEpisode]);
+
+  // Track and save watching record into user history
+  useEffect(() => {
+    if (!user || !selectedServer) return;
+
+    const saveWatchHistory = async () => {
+      try {
+        const historyId = `${user.uid}_${movie.id}`;
+        await setDoc(doc(db, "watch_history", historyId), {
+          userId: user.uid,
+          movieId: movie.id,
+          movieTitle: movie.title,
+          moviePosterUrl: movie.posterUrl,
+          movieCategory: movie.category,
+          movieGenre: movie.genre || "",
+          watchedAt: new Date().toISOString(),
+          serverName: selectedServer.name,
+          seasonNumber: activeSeason ? activeSeason.seasonNumber : null,
+          episodeNumber: activeEpisode ? activeEpisode.episodeNumber : null,
+        });
+      } catch (err) {
+        console.warn("Failed to write watch history record:", err);
+      }
+    };
+
+    saveWatchHistory();
+  }, [user?.uid, movie.id, selectedServer?.name, activeSeasonIdx, activeEpisodeIdx]);
 
   const handleShareClick = () => {
     // Generate a shareable URL incorporating the movie ID
@@ -175,10 +242,68 @@ export default function MovieDetail({
     <div className="relative min-h-screen pb-16">
       {/* Lights-off overlay for cinema state */}
       {lightsOff && (
-        <div 
-          onClick={() => setLightsOff(false)}
-          className="fixed inset-0 z-50 bg-black/98 transition-colors duration-500 cursor-pointer"
-        />
+        <>
+          <div 
+            onClick={() => setLightsOff(false)}
+            className={`fixed inset-0 z-50 transition-all duration-700 cursor-pointer ${getPresetOverlayClass()}`}
+          />
+          
+          {/* Floating Cinema presets selector while lightsOff is on */}
+          <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-[60] flex items-center gap-3 bg-[#0d0d0f]/90 backdrop-blur-md border border-stone-800 px-4 py-2.5 rounded-full shadow-2xl animate-fade-in text-right">
+            <span className="text-[10px] text-stone-400 font-sans font-bold select-none shrink-0 border-l border-stone-800 pl-2">باکگراوندی سینەمایی:</span>
+            <div className="flex gap-2">
+              <button
+                onClick={() => setCinemaPreset("noir")}
+                className={`px-2.5 py-1 text-[10px] font-bold font-sans rounded-full border transition-all cursor-pointer ${
+                  cinemaPreset === "noir" 
+                    ? "bg-stone-50 text-stone-950 border-stone-50 shadow-[0_0_8px_rgba(255,255,255,0.2)]" 
+                    : "bg-stone-900/50 text-stone-400 border-stone-800 hover:text-stone-200"
+                }`}
+              >
+                ڕەشی تەواو
+              </button>
+              <button
+                onClick={() => setCinemaPreset("neon")}
+                className={`px-2.5 py-1 text-[10px] font-bold font-sans rounded-full border transition-all cursor-pointer ${
+                  cinemaPreset === "neon" 
+                    ? "bg-sky-500 text-stone-950 border-sky-500 shadow-[0_0_12px_rgba(14,165,233,0.35)]" 
+                    : "bg-sky-950/20 text-sky-400 border-sky-900/40 hover:text-sky-300"
+                }`}
+              >
+                نیۆنی شین
+              </button>
+              <button
+                onClick={() => setCinemaPreset("ember")}
+                className={`px-2.5 py-1 text-[10px] font-bold font-sans rounded-full border transition-all cursor-pointer ${
+                  cinemaPreset === "ember" 
+                    ? "bg-amber-600 text-stone-950 border-amber-600 shadow-[0_0_12px_rgba(217,119,6,0.35)]" 
+                    : "bg-amber-950/20 text-amber-500 border-amber-900/40 hover:text-amber-400"
+                }`}
+              >
+                پشکۆی گەرم
+              </button>
+              <button
+                onClick={() => setCinemaPreset("gold")}
+                className={`px-2.5 py-1 text-[10px] font-bold font-sans rounded-full border transition-all cursor-pointer ${
+                  cinemaPreset === "gold" 
+                    ? "bg-yellow-500 text-stone-950 border-yellow-500 shadow-[0_0_12px_rgba(234,179,8,0.35)]" 
+                    : "bg-yellow-950/20 text-yellow-500 border-yellow-904/40 hover:text-yellow-400"
+                }`}
+              >
+                درەوشانەوە
+              </button>
+            </div>
+            
+            <div className="h-4 w-px bg-stone-800 mx-1 shrink-0" />
+            <button
+              onClick={() => setLightsOff(false)}
+              className="text-[10px] text-yellow-500 hover:text-white font-sans font-bold flex items-center gap-1 cursor-pointer shrink-0"
+            >
+              <LightbulbOff size={11} className="text-yellow-500 fill-yellow-500" />
+              <span>داگیرساندنی گلۆپ</span>
+            </button>
+          </div>
+        </>
       )}
 
       {/* Hero Backdrop Header Banner */}
@@ -510,9 +635,9 @@ export default function MovieDetail({
                     {/* User info meta */}
                     <div className="flex items-center justify-between flex-row-reverse text-xs text-stone-400">
                       <div className="flex items-center gap-2">
-                        <span>{user.displayName || "بینەر"}</span>
-                        {user.photoURL ? (
-                          <img src={user.photoURL} alt="" referrerPolicy="no-referrer" className="h-6 w-6 rounded-full border border-stone-700" />
+                        <span>{customDisplayName || user.displayName || "بینەر"}</span>
+                        {customPhotoURL || (user.photoURL && user.photoURL !== "/custom_avatar") ? (
+                          <img src={customPhotoURL || user.photoURL || undefined} alt="" referrerPolicy="no-referrer" className="h-6 w-6 rounded-full border border-stone-700" />
                         ) : (
                           <div className="h-6 w-6 rounded-full bg-stone-800 flex items-center justify-center text-stone-400">
                             <User size={12} />
@@ -635,8 +760,22 @@ export default function MovieDetail({
                             )}
                           </div>
 
-                          {/* Comment delete or starts rating info */}
+                          {/* Comment controls (Edit / Delete / Star rating) */}
                           <div className="flex items-center gap-2">
+                            {isAuthor && editingCommentId !== comment.id && (
+                              <button
+                                onClick={() => {
+                                  setEditingCommentId(comment.id);
+                                  setEditingCommentText(comment.text);
+                                  setEditingCommentRating(comment.rating || 5);
+                                }}
+                                className="h-7 w-7 rounded-lg border border-stone-850 hover:border-yellow-500/30 text-stone-400 hover:text-yellow-500 flex items-center justify-center transition duration-200 cursor-pointer"
+                                title="دەستکاریکردنی لێدوان"
+                              >
+                                <Pencil size={11} />
+                              </button>
+                            )}
+
                             {(isAuthor || isAdminUser) && (
                               <button
                                 onClick={() => handleCommentDelete(comment.id)}
@@ -653,17 +792,68 @@ export default function MovieDetail({
                                 <Star
                                   key={s}
                                   size={10}
-                                  className={s <= comment.rating ? "fill-yellow-400 text-yellow-400 stroke-none" : "text-stone-700"}
+                                  className={s <= (editingCommentId === comment.id ? editingCommentRating : comment.rating) ? "fill-yellow-400 text-yellow-400 stroke-none" : "text-stone-700"}
                                 />
                               ))}
                             </div>
                           </div>
                         </div>
 
-                        {/* Text of comment */}
-                        <p className="text-xs text-stone-300 font-sans leading-relaxed text-right rtl-dir whitespace-pre-wrap">
-                          {comment.text}
-                        </p>
+                        {/* Text of comment or Edit View */}
+                        {editingCommentId === comment.id ? (
+                          <div className="mt-2 space-y-3 bg-stone-900/40 p-3.5 rounded-xl border border-stone-800 text-right rtl-dir">
+                            {/* Star rating picker for edit */}
+                            <div className="flex items-center justify-between text-xs flex-row-reverse mb-1">
+                              <span className="text-stone-400 font-sans">هەڵسەنگاندنی نوێ:</span>
+                              <div className="flex gap-1 flex-row-reverse">
+                                {[1, 2, 3, 4, 5].map((star) => (
+                                  <button
+                                    type="button"
+                                    key={star}
+                                    onClick={() => setEditingCommentRating(star)}
+                                    className="p-0.5 text-stone-500 hover:text-yellow-400 transition cursor-pointer"
+                                  >
+                                    <Star
+                                      size={15}
+                                      className={star <= editingCommentRating ? "fill-yellow-400 text-yellow-400 stroke-none animate-[pulse_1s_infinite]" : "text-stone-700"}
+                                    />
+                                  </button>
+                                ))}
+                              </div>
+                            </div>
+
+                            {/* Edit text area */}
+                            <textarea
+                              value={editingCommentText}
+                              onChange={(e) => setEditingCommentText(e.target.value)}
+                              className="w-full rounded-lg border border-stone-800 bg-[#121214] p-2.5 text-right text-xs text-stone-200 focus:border-yellow-500/40 focus:outline-none focus:ring-1 focus:ring-yellow-500/20 font-sans leading-relaxed"
+                              rows={3}
+                            />
+
+                            {/* Edit action buttons */}
+                            <div className="flex gap-2">
+                              <button
+                                onClick={() => {
+                                  setEditingCommentId(null);
+                                  setEditingCommentText("");
+                                }}
+                                className="flex-1 py-1.5 px-3 rounded-lg border border-stone-800 bg-stone-950/40 hover:bg-stone-900 text-stone-400 hover:text-stone-300 font-sans text-[11px] transition cursor-pointer"
+                              >
+                                پاشگەزبوونەوە
+                              </button>
+                              <button
+                                onClick={() => handleCommentUpdate(comment.id)}
+                                className="flex-1 py-1.5 px-3 rounded-lg bg-yellow-500 hover:bg-yellow-400 text-stone-950 font-sans text-[11px] font-bold shadow-lg shadow-yellow-500/5 transition cursor-pointer"
+                              >
+                                پاشەکەوتکردن
+                              </button>
+                            </div>
+                          </div>
+                        ) : (
+                          <p className="text-xs text-stone-300 font-sans leading-relaxed text-right rtl-dir whitespace-pre-wrap">
+                            {comment.text}
+                          </p>
+                        )}
                       </div>
                     );
                   })
