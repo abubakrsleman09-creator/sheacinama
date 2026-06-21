@@ -675,8 +675,8 @@ export default function EditProfileModal({
 
                           <div className="flex items-center gap-2 justify-end text-[10px] text-stone-500 font-sans flex-row-reverse">
                             {item.seasonNumber && item.episodeNumber && (
-                              <span className="font-mono text-stone-400 font-bold bg-stone-900 px-1 rounded">
-                                W{item.seasonNumber} - EP{item.episodeNumber}
+                              <span className="font-sans text-stone-300 font-bold bg-stone-900 px-1.5 py-0.5 rounded text-[9px] border border-stone-800">
+                                وەرزی {item.seasonNumber} - ئەڵقەی {item.episodeNumber}
                               </span>
                             )}
                             <span className="flex items-center gap-1 truncate text-stone-400">

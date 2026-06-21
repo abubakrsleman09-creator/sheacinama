@@ -61,6 +61,39 @@
         "createdAt": { "type": "string" }
       },
       "required": ["movieId", "userId"]
+    },
+    "Playlist": {
+      "title": "Playlist",
+      "description": "Custom curated movie collection",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string" },
+        "userName": { "type": "string" },
+        "userPhoto": { "type": "string" },
+        "title": { "type": "string" },
+        "description": { "type": "string" },
+        "isPublic": { "type": "boolean" },
+        "theme": { "type": "string" },
+        "likes": { "type": "integer" },
+        "likedBy": { "type": "array" },
+        "movieIds": { "type": "array" },
+        "createdAt": { "type": "string" }
+      },
+      "required": ["userId", "title"]
+    },
+    "Notification": {
+      "title": "Notification",
+      "description": "Direct user messages or global announcements",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string" },
+        "title": { "type": "string" },
+        "message": { "type": "string" },
+        "type": { "type": "string" },
+        "isRead": { "type": "boolean" },
+        "createdAt": { "type": "string" }
+      },
+      "required": ["userId", "title", "message"]
     }
   },
   "firestore": {
@@ -79,6 +112,14 @@
     "/watchlist/{watchId}": {
       "schema": "Watchlist",
       "description": "List of pending items to watch later"
+    },
+    "/playlists/{playlistId}": {
+      "schema": "Playlist",
+      "description": "User curated playlists and collections"
+    },
+    "/notifications/{notificationId}": {
+      "schema": "Notification",
+      "description": "Notifications and global announcements feed"
     }
   }
 }

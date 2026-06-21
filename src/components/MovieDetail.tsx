@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from "react";
-import { X, Star, Calendar, Bookmark, Eye, Play, Share2, CornerDownLeft, Volume2, Info, Lightbulb, LightbulbOff, Heart, Trash, MessageSquare, Send, User, RotateCw, Pencil } from "lucide-react";
+import { X, Star, Calendar, Bookmark, Eye, Play, Share2, CornerDownLeft, Volume2, Info, Lightbulb, LightbulbOff, Heart, Trash, MessageSquare, Send, User, RotateCw, Pencil, ThumbsUp, CheckCircle } from "lucide-react";
 import { User as FirebaseUser } from "firebase/auth";
-import { collection, query, where, orderBy, onSnapshot, addDoc, serverTimestamp, deleteDoc, doc, setDoc, updateDoc } from "firebase/firestore";
+import { collection, query, where, orderBy, onSnapshot, addDoc, serverTimestamp, deleteDoc, doc, setDoc, updateDoc, arrayUnion, arrayRemove, increment } from "firebase/firestore";
 import { db } from "../firebase";
 import { Movie, StreamServer, Season, Episode } from "../types";
 import { handleFirestoreError, OperationType } from "../firestoreErrorHandler";
@@ -61,6 +61,15 @@ export default function MovieDetail({
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isLoadingComments, setIsLoadingComments] = useState(true);
 
+  // States for comprehensive ratings breakdown options
+  const [storyRating, setStoryRating] = useState(8);
+  const [actingRating, setActingRating] = useState(8);
+  const [visualsRating, setVisualsRating] = useState(8);
+  const [soundRating, setSoundRating] = useState(8);
+  const [prosInput, setProsInput] = useState("");
+  const [consInput, setConsInput] = useState("");
+  const [isRecommended, setIsRecommended] = useState(true);
+
   // Edit comment states
   const [editingCommentId, setEditingCommentId] = useState<string | null>(null);
   const [editingCommentText, setEditingCommentText] = useState("");
@@ -113,6 +122,17 @@ export default function MovieDetail({
 
     setIsSubmitting(true);
     try {
+      // Split pros and cons by commas or newlines
+      const prosArray = prosInput
+        .split(/[,\n]/)
+        .map((p) => p.trim())
+        .filter((p) => p.length > 0);
+
+      const consArray = consInput
+        .split(/[,\n]/)
+        .map((c) => c.trim())
+        .filter((c) => c.length > 0);
+
       await addDoc(collection(db, "comments"), {
         movieId: movie.id,
         userId: user.uid,
@@ -121,15 +141,77 @@ export default function MovieDetail({
         userPhoto: customPhotoURL || (user.photoURL === "/custom_avatar" ? "" : user.photoURL) || "",
         text: commentText.trim(),
         rating: commentRating,
+        storyRating,
+        actingRating,
+        visualsRating,
+        soundRating,
+        pros: prosArray,
+        cons: consArray,
+        isRecommended,
+        helpfulCount: 0,
+        helpfulBy: [],
         createdAt: serverTimestamp()
       });
 
       setCommentText("");
-      setCommentRating(5); // Reset
+      setCommentRating(5);
+      setStoryRating(8);
+      setActingRating(8);
+      setVisualsRating(8);
+      setSoundRating(8);
+      setProsInput("");
+      setConsInput("");
+      setIsRecommended(true);
+
+      // Trigger optional system notification for movie review submissions to admins or public logs if we want
+      await addDoc(collection(db, "notifications"), {
+        userId: "public",
+        title: "پێداچوونەوەیەکی نوێ بڵاوکرایەوە",
+        message: `${customDisplayName || user.displayName || "بینەرێک"} پێداچوونەوەیەکی گشتگیری بۆ فلیمی "${movie.title}" زیاد کرد!`,
+        type: "movie_added",
+        isRead: false,
+        createdAt: new Date().toISOString()
+      });
+
     } catch (err) {
       handleFirestoreError(err, OperationType.CREATE, "comments");
     } finally {
       setIsSubmitting(false);
+    }
+  };
+
+  // Toggle helpful reviews votes dynamically
+  const handleToggleHelpful = async (commentId: string) => {
+    if (!user) {
+      onLoginClick();
+      return;
+    }
+    const comment = comments.find((c) => c.id === commentId);
+    if (!comment) return;
+
+    const helpfulBy = comment.helpfulBy || [];
+    const hasLiked = helpfulBy.includes(user.uid);
+    const ref = doc(db, "comments", commentId);
+
+    try {
+      await updateDoc(ref, {
+        helpfulBy: hasLiked ? arrayRemove(user.uid) : arrayUnion(user.uid),
+        helpfulCount: increment(hasLiked ? -1 : 1)
+      });
+
+      // Notify the recipient
+      if (!hasLiked && comment.userId !== user.uid) {
+        await addDoc(collection(db, "notifications"), {
+          userId: comment.userId,
+          title: "پێداچوونەوەکەت بەسوود بوو",
+          message: `${customDisplayName || user.displayName || "بینەرێک"} لێدووانەکەی تۆی لەسەر فلیمی "${movie.title}" وەک بەسوود دیاری کرد.`,
+          type: "like",
+          isRead: false,
+          createdAt: new Date().toISOString()
+        });
+      }
+    } catch (err) {
+      console.warn("Helpful vote error:", err);
     }
   };
 
@@ -604,24 +686,24 @@ export default function MovieDetail({
               </p>
             </div>
 
-            {/* Reviews & Comments Section (Kurdish) */}
+            {/* Comprehensive Reviews & Comments Section (Kurdish) */}
             <div className="rounded-2xl border border-stone-800 bg-[#0d0d0f] p-5 space-y-6">
               <div className="flex items-center justify-between border-b border-stone-800/60 pb-3 flex-row-reverse">
                 <div className="flex items-center gap-2">
                   <MessageSquare size={16} className="text-yellow-500" />
                   <h3 className="text-stone-200 text-sm font-bold font-sans text-right">
-                    لێدوان و هەڵسەنگاندنەکان ({comments.length})
+                    هەڵسەنگاندن و پێداچوونەوە گشتگیرەکان ({comments.length})
                   </h3>
                 </div>
-                <span className="text-[10px] text-stone-500 font-sans uppercase">Reviews thread</span>
+                <span className="text-[10px] text-stone-500 font-sans uppercase">Comprehensive Reviews</span>
               </div>
 
-              {/* Add Comment section */}
+              {/* Add Comment / Review section */}
               <div>
                 {!user ? (
-                  <div className="rounded-xl border border-dashed border-stone-800 bg-[#08080a] p-4 text-center my-2 space-y-3">
+                  <div className="rounded-xl border border-dashed border-stone-800 bg-[#08080a] p-5 text-center my-2 space-y-3">
                     <p className="text-xs text-stone-400 font-sans">
-                      تکایە سەرەتا بچۆ ژوورەوە بۆ نووسینی لێدوان و پێشکەشکردنی نمرەی هەڵسەنگاندن.
+                      تکایە سەرەتا بچۆ ژوورەوە بۆ پێشکەشکردنی لێدوانی گشتگیر و هەڵسەنگاندنی بەشەکان.
                     </p>
                     <button
                       onClick={onLoginClick}
@@ -631,23 +713,11 @@ export default function MovieDetail({
                     </button>
                   </div>
                 ) : (
-                  <form onSubmit={handleCommentSubmit} className="space-y-4">
-                    {/* User info meta */}
-                    <div className="flex items-center justify-between flex-row-reverse text-xs text-stone-400">
-                      <div className="flex items-center gap-2">
-                        <span>{customDisplayName || user.displayName || "بینەر"}</span>
-                        {customPhotoURL || (user.photoURL && user.photoURL !== "/custom_avatar") ? (
-                          <img src={customPhotoURL || user.photoURL || undefined} alt="" referrerPolicy="no-referrer" className="h-6 w-6 rounded-full border border-stone-700" />
-                        ) : (
-                          <div className="h-6 w-6 rounded-full bg-stone-800 flex items-center justify-center text-stone-400">
-                            <User size={12} />
-                          </div>
-                        )}
-                      </div>
-                      
-                      {/* Active rating rating selection */}
+                  <form onSubmit={handleCommentSubmit} className="space-y-4 text-right">
+                    {/* User Profile Info Meta & Overall Rating */}
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-[#08080a]/60 p-3 rounded-xl border border-stone-850 flex-col-reverse">
                       <div className="flex items-center gap-2 flex-row-reverse">
-                        <span className="text-[10px] text-stone-500 font-sans">نمرەی هەڵسەنگاندن:</span>
+                        <span className="text-[11px] font-sans font-bold text-stone-300">نمرەی سەرەکی:</span>
                         <div className="flex gap-1">
                           {[1, 2, 3, 4, 5].map((star) => (
                             <button
@@ -657,19 +727,128 @@ export default function MovieDetail({
                               className="text-yellow-400 hover:scale-110 transition duration-150 cursor-pointer"
                             >
                               <Star
-                                size={15}
-                                className={star <= commentRating ? "fill-yellow-400 text-yellow-400 stroke-none" : "text-stone-600"}
+                                size={16}
+                                className={star <= commentRating ? "fill-yellow-400 text-yellow-400 stroke-none" : "text-stone-700"}
                               />
                             </button>
                           ))}
                         </div>
-                        <span className="text-[10px] text-yellow-500 font-semibold font-sans">
+                        <span className="text-[10px] text-yellow-500 font-bold font-sans">
                           {commentRating === 1 && "خراپ" ||
                            commentRating === 2 && "باش نییە" ||
                            commentRating === 3 && "ئاسایی" ||
                            commentRating === 4 && "زۆر باش" ||
                            commentRating === 5 && "نایاب و دڵگیر!"}
                         </span>
+                      </div>
+
+                      <div className="flex items-center gap-2 flex-row-reverse">
+                        <span className="text-xs font-semibold text-stone-300">{customDisplayName || user.displayName || "بینەر"}</span>
+                        {customPhotoURL || (user.photoURL && user.photoURL !== "/custom_avatar") ? (
+                          <img src={customPhotoURL || user.photoURL || undefined} alt="" referrerPolicy="no-referrer" className="h-6 w-6 rounded-full border border-stone-700" />
+                        ) : (
+                          <div className="h-6 w-6 rounded-full bg-stone-800 flex items-center justify-center text-stone-400">
+                            <User size={12} />
+                          </div>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Highly Interactive Criteria Sliders Breakdown */}
+                    <div className="bg-[#08080a]/30 p-4 rounded-xl border border-stone-850 space-y-3">
+                      <h4 className="text-[11px] text-yellow-500 font-bold font-sans mb-1 text-right">خاڵبەندی لایەنەکانی تر (لە ١٠ نمرە):</h4>
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                        {/* Story Slider */}
+                        <div className="space-y-1">
+                          <div className="flex justify-between items-center text-[10px] text-stone-400 font-sans flex-row-reverse">
+                            <span>چیرۆک و دیالۆگ: <strong className="text-stone-200">{storyRating}/١٠</strong></span>
+                          </div>
+                          <input
+                            type="range" min="1" max="10"
+                            value={storyRating}
+                            onChange={(e) => setStoryRating(Number(e.target.value))}
+                            className="w-full h-1 bg-stone-800 rounded-lg appearance-none cursor-pointer accent-yellow-500"
+                          />
+                        </div>
+
+                        {/* Acting Slider */}
+                        <div className="space-y-1">
+                          <div className="flex justify-between items-center text-[10px] text-stone-400 font-sans flex-row-reverse">
+                            <span>نواندنی ئەکتەرەکان: <strong className="text-stone-200">{actingRating}/١٠</strong></span>
+                          </div>
+                          <input
+                            type="range" min="1" max="10"
+                            value={actingRating}
+                            onChange={(e) => setActingRating(Number(e.target.value))}
+                            className="w-full h-1 bg-stone-800 rounded-lg appearance-none cursor-pointer accent-yellow-500"
+                          />
+                        </div>
+
+                        {/* Visuals Slider */}
+                        <div className="space-y-1">
+                          <div className="flex justify-between items-center text-[10px] text-stone-400 font-sans flex-row-reverse">
+                            <span>بینراو و دەرهێنان: <strong className="text-stone-200">{visualsRating}/١٠</strong></span>
+                          </div>
+                          <input
+                            type="range" min="1" max="10"
+                            value={visualsRating}
+                            onChange={(e) => setVisualsRating(Number(e.target.value))}
+                            className="w-full h-1 bg-stone-800 rounded-lg appearance-none cursor-pointer accent-yellow-500"
+                          />
+                        </div>
+
+                        {/* Soundtrack Slider */}
+                        <div className="space-y-1">
+                          <div className="flex justify-between items-center text-[10px] text-stone-400 font-sans flex-row-reverse">
+                            <span>مۆسیقا و دەنگ: <strong className="text-stone-200">{soundRating}/١٠</strong></span>
+                          </div>
+                          <input
+                            type="range" min="1" max="10"
+                            value={soundRating}
+                            onChange={(e) => setSoundRating(Number(e.target.value))}
+                            className="w-full h-1 bg-stone-800 rounded-lg appearance-none cursor-pointer accent-yellow-500"
+                          />
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Recommendation Toggle Option */}
+                    <div className="flex items-center justify-between p-3 rounded-xl bg-stone-900/20 border border-stone-850 flex-row-reverse">
+                      <span className="text-[11px] text-stone-300 font-sans">ئایا ئەم بەرهەمە پێشنیار دەکەیت بۆ بینەرانی تر؟</span>
+                      <button
+                        type="button"
+                        onClick={() => setIsRecommended(!isRecommended)}
+                        className={`px-4 py-1.5 rounded-lg text-[10px] font-bold font-sans transition-all cursor-pointer ${
+                          isRecommended
+                            ? "bg-emerald-500/10 border border-emerald-500/30 text-emerald-400"
+                            : "bg-red-500/10 border border-red-500/30 text-red-400"
+                        }`}
+                      >
+                        {isRecommended ? "پێشنیاری دەکەم ✓" : "پێشنیاری ناکەم ✗"}
+                      </button>
+                    </div>
+
+                    {/* Pros and Cons entries */}
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-right">
+                      <div className="space-y-1">
+                        <label className="text-[10px] text-stone-400 font-sans">دیاریکردنی خاڵە بەهێزەکان (بە کۆما جیا بکەرەوە):</label>
+                        <input
+                          type="text"
+                          value={prosInput}
+                          onChange={(e) => setProsInput(e.target.value)}
+                          placeholder="نموونە: دیمەنە تەکنیکییە نایابەکان، ئاوازی جادوویی"
+                          className="w-full text-xs rounded-lg border border-stone-800 bg-[#08080a] p-2 text-right text-stone-200 placeholder-stone-605 font-sans focus:outline-none focus:border-stone-700"
+                        />
+                      </div>
+                      <div className="space-y-1">
+                        <label className="text-[10px] text-stone-400 font-sans">دیاریکردنی خاڵە لاوازەکان (بە کۆما جیا بکەرەوە):</label>
+                        <input
+                          type="text"
+                          value={consInput}
+                          onChange={(e) => setConsInput(e.target.value)}
+                          placeholder="نموونە: درێژکردنەوەی بێزارکەر، گەشەی هێواش"
+                          className="w-full text-xs rounded-lg border border-stone-800 bg-[#08080a] p-2 text-right text-stone-200 placeholder-stone-605 font-sans focus:outline-none focus:border-stone-700"
+                        />
                       </div>
                     </div>
 
@@ -678,7 +857,7 @@ export default function MovieDetail({
                       <textarea
                         value={commentText}
                         onChange={(e) => setCommentText(e.target.value)}
-                        placeholder="بیروبۆچوونی خۆت بنووسە لەسەر ئەم بەرهەمە..."
+                        placeholder="پێداچوونەوە و شیکردنەوەی خۆت بنووسە لەسەر ئەم پۆستەرە سەرنجڕاکێشە..."
                         rows={3}
                         className="w-full rounded-xl bg-[#08080a] border border-stone-800 p-4 text-xs font-sans text-stone-100 placeholder-stone-500 focus:outline-none focus:border-yellow-500/50 resize-none pr-4 pl-12 text-right"
                       />
@@ -686,7 +865,7 @@ export default function MovieDetail({
                         type="submit"
                         disabled={isSubmitting || commentText.trim().length === 0}
                         className="absolute left-3 bottom-4 h-8 w-8 rounded-lg bg-yellow-500 hover:bg-yellow-400 text-stone-950 flex items-center justify-center transition-all duration-200 cursor-pointer disabled:opacity-50 disabled:hover:bg-yellow-500"
-                        title="بڵاوکردنەوە"
+                        title="بڵاوکردنەوەی هەڵسەنگاندین"
                       >
                         {isSubmitting ? <RotateCw className="animate-spin" size={14} /> : <Send size={14} />}
                       </button>
@@ -696,15 +875,15 @@ export default function MovieDetail({
               </div>
 
               {/* Comments List */}
-              <div className="space-y-4 max-h-[400px] overflow-y-auto pr-1">
+              <div className="space-y-5 max-h-[500px] overflow-y-auto pr-1">
                 {isLoadingComments ? (
                   <div className="flex flex-col items-center justify-center py-8 text-stone-500 gap-1.5">
                     <RotateCw className="animate-spin text-yellow-500" size={18} />
-                    <span className="text-[10px] font-sans">بارکردنی لێدوانەکان...</span>
+                    <span className="text-[10px] font-sans">بارکردنی پێداچوونەوەکان...</span>
                   </div>
                 ) : comments.length === 0 ? (
                   <div className="text-center py-8 border border-dashed border-stone-800/80 rounded-xl bg-[#08080a]">
-                    <p className="text-[11px] text-stone-500 font-sans">هیچ پێداچوونەوەیەک بەردەست نییە. ببەرە یەکەم کەس کە بۆچوونی خۆی دەنووسێت!</p>
+                    <p className="text-[11px] text-stone-500 font-sans">هیچ پێداچوونەوە کوالیتی بەرزی بڵاوکراوە لێرە نییە.</p>
                   </div>
                 ) : (
                   comments.map((comment) => {
@@ -732,10 +911,13 @@ export default function MovieDetail({
                       });
                     };
 
+                    // Check if it's a comprehensive review
+                    const hasComplexRatings = comment.storyRating !== undefined || comment.actingRating !== undefined;
+
                     return (
                       <div
                         key={comment.id}
-                        className="rounded-xl border border-stone-800/60 bg-[#08080a]/50 p-4 flex flex-col gap-2.5 hover:border-stone-800 transition duration-200"
+                        className="rounded-2xl border border-stone-850 bg-[#08080a]/40 p-4 sm:p-5 flex flex-col gap-4 hover:border-stone-800 transition duration-200 text-right"
                       >
                         {/* Header of comment info card */}
                         <div className="flex items-start justify-between flex-row-reverse">
@@ -779,7 +961,7 @@ export default function MovieDetail({
                             {(isAuthor || isAdminUser) && (
                               <button
                                 onClick={() => handleCommentDelete(comment.id)}
-                                className="h-7 w-7 rounded-lg border border-stone-850 hover:border-red-500/30 text-stone-400 hover:text-red-500 flex items-center justify-center transition duration-200 cursor-pointer"
+                                className="h-7 w-7 rounded-lg border border-stone-850 hover:border-red-500/30 text-stone-400 hover:text-red-400 flex items-center justify-center transition duration-200 cursor-pointer"
                                 title="سڕینەوەی لێدوان"
                               >
                                 <Trash size={12} />
@@ -787,7 +969,7 @@ export default function MovieDetail({
                             )}
 
                             {/* Stars badge */}
-                            <div className="flex gap-0.5 bg-[#0e0e11] px-2 py-1 rounded-lg border border-stone-800/80">
+                            <div className="flex gap-0.5 bg-[#0e0e11] px-2.5 py-1 rounded-lg border border-stone-800/80">
                               {[1, 2, 3, 4, 5].map((s) => (
                                 <Star
                                   key={s}
@@ -801,7 +983,7 @@ export default function MovieDetail({
 
                         {/* Text of comment or Edit View */}
                         {editingCommentId === comment.id ? (
-                          <div className="mt-2 space-y-3 bg-stone-900/40 p-3.5 rounded-xl border border-stone-800 text-right rtl-dir">
+                          <div className="mt-1 space-y-3 bg-stone-900/40 p-3.5 rounded-xl border border-stone-800 text-right rtl-dir">
                             {/* Star rating picker for edit */}
                             <div className="flex items-center justify-between text-xs flex-row-reverse mb-1">
                               <span className="text-stone-400 font-sans">هەڵسەنگاندنی نوێ:</span>
@@ -850,9 +1032,124 @@ export default function MovieDetail({
                             </div>
                           </div>
                         ) : (
-                          <p className="text-xs text-stone-300 font-sans leading-relaxed text-right rtl-dir whitespace-pre-wrap">
-                            {comment.text}
-                          </p>
+                          <div className="space-y-3">
+                            {/* If review has a recommendation option */}
+                            {comment.isRecommended !== undefined && (
+                              <div className="flex justify-start">
+                                {comment.isRecommended ? (
+                                  <span className="flex items-center gap-1 bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 text-[10px] px-2.5 py-1 rounded-full font-bold">
+                                    پێشنیار دەکات ✓
+                                  </span>
+                                ) : (
+                                  <span className="flex items-center gap-1 bg-red-500/10 border border-red-500/20 text-red-400 text-[10px] px-2.5 py-1 rounded-full font-bold">
+                                    پێشنیار ناکات ✗
+                                  </span>
+                                )}
+                              </div>
+                            )}
+
+                            {/* Main feedback body */}
+                            <p className="text-xs text-stone-300 font-sans leading-relaxed text-right whitespace-pre-wrap">
+                              {comment.text}
+                            </p>
+
+                            {/* Criterion breakdowns meters */}
+                            {hasComplexRatings && (
+                              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 bg-stone-900/10 p-3 rounded-xl border border-stone-850/60 text-right select-none font-sans mt-2">
+                                <div className="text-[10px] text-stone-400">
+                                  <div className="flex justify-between flex-row-reverse mb-0.5 text-[9px] text-stone-500 mb-1">
+                                    <span>چیرۆک</span>
+                                    <strong>{comment.storyRating || 8}/١٠</strong>
+                                  </div>
+                                  <div className="w-full bg-stone-900/80 h-1.5 rounded-full overflow-hidden">
+                                    <div className="bg-yellow-500 h-1.5 rounded-full" style={{ width: `${(comment.storyRating || 8) * 10}%` }} />
+                                  </div>
+                                </div>
+
+                                <div className="text-[10px] text-stone-400">
+                                  <div className="flex justify-between flex-row-reverse mb-0.5 text-[9px] text-stone-500 mb-1">
+                                    <span>نواندن</span>
+                                    <strong>{comment.actingRating || 8}/١٠</strong>
+                                  </div>
+                                  <div className="w-full bg-stone-900/80 h-1.5 rounded-full overflow-hidden">
+                                    <div className="bg-yellow-500 h-1.5 rounded-full" style={{ width: `${(comment.actingRating || 8) * 10}%` }} />
+                                  </div>
+                                </div>
+
+                                <div className="text-[10px] text-stone-400">
+                                  <div className="flex justify-between flex-row-reverse mb-0.5 text-[9px] text-stone-500 mb-1">
+                                    <span>تەکنیکی</span>
+                                    <strong>{comment.visualsRating || 8}/١٠</strong>
+                                  </div>
+                                  <div className="w-full bg-stone-900/80 h-1.5 rounded-full overflow-hidden">
+                                    <div className="bg-yellow-500 h-1.5 rounded-full" style={{ width: `${(comment.visualsRating || 8) * 10}%` }} />
+                                  </div>
+                                </div>
+
+                                <div className="text-[10px] text-stone-400">
+                                  <div className="flex justify-between flex-row-reverse mb-0.5 text-[9px] text-stone-500 mb-1">
+                                    <span>دەنگ و مۆسیقا</span>
+                                    <strong>{comment.soundRating || 8}/١٠</strong>
+                                  </div>
+                                  <div className="w-full bg-stone-900/80 h-1.5 rounded-full overflow-hidden">
+                                    <div className="bg-yellow-500 h-1.5 rounded-full" style={{ width: `${(comment.soundRating || 8) * 10}%` }} />
+                                  </div>
+                                </div>
+                              </div>
+                            )}
+
+                            {/* Pros & Cons listed visual breakdown */}
+                            {((comment.pros && comment.pros.length > 0) || (comment.cons && comment.cons.length > 0)) && (
+                              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mt-2 border-t border-stone-850/40 pt-2 text-right">
+                                {/* Pros column */}
+                                {comment.pros && comment.pros.length > 0 && (
+                                  <div className="space-y-1">
+                                    <span className="text-[9px] text-emerald-400 font-bold block">خاڵە بەهێزەکان:</span>
+                                    <div className="space-y-0.5">
+                                      {comment.pros.map((p: string, idx: number) => (
+                                        <div key={idx} className="text-[10px] text-stone-400 flex items-center gap-1 justify-end flex-row-reverse">
+                                          <div className="h-1 w-1 bg-emerald-400 rounded-full" />
+                                          <span>{p}</span>
+                                        </div>
+                                      ))}
+                                    </div>
+                                  </div>
+                                )}
+
+                                {/* Cons column */}
+                                {comment.cons && comment.cons.length > 0 && (
+                                  <div className="space-y-1">
+                                    <span className="text-[9px] text-red-400 font-bold block">خاڵە لاوازەکان:</span>
+                                    <div className="space-y-0.5">
+                                      {comment.cons.map((c: string, idx: number) => (
+                                        <div key={idx} className="text-[10px] text-stone-400 flex items-center gap-1 justify-end flex-row-reverse">
+                                          <div className="h-1 w-1 bg-red-400 rounded-full" />
+                                          <span>{c}</span>
+                                        </div>
+                                      ))}
+                                    </div>
+                                  </div>
+                                )}
+                              </div>
+                            )}
+
+                            {/* Thumbs up upvote review helpful action button bar */}
+                            <div className="flex items-center justify-between border-t border-stone-900/80 pt-2.5 mt-2 flex-row-reverse">
+                              <button
+                                onClick={() => handleToggleHelpful(comment.id)}
+                                className={`flex items-center gap-1.5 text-[10px] font-sans px-3 py-1.5 rounded-lg border transition cursor-pointer select-none ${
+                                  user && comment.helpfulBy?.includes(user.uid)
+                                    ? "bg-yellow-500/10 border-yellow-500/20 text-yellow-500 font-semibold"
+                                    : "bg-transparent border-stone-850 text-stone-400 hover:text-stone-200"
+                                }`}
+                              >
+                                <ThumbsUp size={11} className={user && comment.helpfulBy?.includes(user?.uid) ? "fill-yellow-500/20" : ""} />
+                                <span>بەسوودە ({comment.helpfulCount || 0})</span>
+                              </button>
+
+                              <span className="text-[9px] text-stone-600 font-sans">ئەم پێداچوونەوەیە چاکسازی دەرهێناوە</span>
+                            </div>
+                          </div>
                         )}
                       </div>
                     );

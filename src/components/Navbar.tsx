@@ -1,6 +1,7 @@
 import { useState, useRef, useEffect } from "react";
-import { Film, Send, LogIn, LogOut, User, Activity, Settings, ChevronDown } from "lucide-react";
+import { Film, Send, LogIn, LogOut, User, Activity, Settings, ChevronDown, List, BarChart3 } from "lucide-react";
 import { User as FirebaseUser } from "firebase/auth";
+import NotificationCenter from "./NotificationCenter";
 
 interface NavbarProps {
   user: FirebaseUser | null;
@@ -14,6 +15,8 @@ interface NavbarProps {
   showAdminPanel: boolean;
   searchQuery: string;
   setSearchQuery: (query: string) => void;
+  onPlaylistsToggle: () => void;
+  onWatchStatsToggle: () => void;
 }
 
 export default function Navbar({
@@ -28,6 +31,8 @@ export default function Navbar({
   showAdminPanel,
   searchQuery,
   setSearchQuery,
+  onPlaylistsToggle,
+  onWatchStatsToggle,
 }: NavbarProps) {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
@@ -112,6 +117,15 @@ export default function Navbar({
             <span className="hidden sm:inline font-sans">تێلیگرام</span>
           </a>
 
+          {/* Public Playlists button */}
+          <button
+            onClick={onPlaylistsToggle}
+            className="flex items-center gap-1.5 rounded-full bg-[#1c1917]/80 hover:bg-yellow-500/10 text-stone-300 hover:text-yellow-400 border border-stone-800 transition-all px-4 py-2 text-xs font-semibold cursor-pointer"
+          >
+            <List size={14} />
+            <span className="font-sans">کۆکراوەکان</span>
+          </button>
+
           {/* Admin Dashboard Access */}
           {isAdmin && (
             <button
@@ -128,6 +142,9 @@ export default function Navbar({
               </span>
             </button>
           )}
+
+          {/* Notification center */}
+          {user && <NotificationCenter user={user} />}
 
           {/* User auth state */}
           {user ? (
@@ -162,6 +179,28 @@ export default function Navbar({
                   </div>
 
                   {/* Actions */}
+                  <button
+                    onClick={() => {
+                      onWatchStatsToggle();
+                      setIsMenuOpen(false);
+                    }}
+                    className="flex w-full items-center justify-end gap-2.5 rounded-lg px-3 py-2 text-right text-xs text-stone-300 hover:bg-stone-900 hover:text-yellow-400 transition-colors font-sans"
+                  >
+                    <span>ئاماری بینینی من</span>
+                    <BarChart3 size={14} className="text-yellow-500 animate-pulse" />
+                  </button>
+
+                  <button
+                    onClick={() => {
+                      onPlaylistsToggle();
+                      setIsMenuOpen(false);
+                    }}
+                    className="flex w-full items-center justify-end gap-2.5 rounded-lg px-3 py-2 text-right text-xs text-stone-300 hover:bg-stone-900 hover:text-yellow-400 transition-colors font-sans"
+                  >
+                    <span>لیست و کۆکراوەکانی من</span>
+                    <List size={14} className="text-yellow-500" />
+                  </button>
+
                   <button
                     onClick={() => {
                       onEditProfileClick();

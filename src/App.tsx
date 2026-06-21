@@ -12,6 +12,8 @@ import MovieDetail from "./components/MovieDetail";
 import AdminPanel from "./components/AdminPanel";
 import AuthModal from "./components/AuthModal";
 import EditProfileModal from "./components/EditProfileModal";
+import UserPlaylists from "./components/UserPlaylists";
+import WatchTimeStats from "./components/WatchTimeStats";
 
 // Import visual assets / vector components
 import { Film, Send, Sparkles, LogIn, Star, Play, CheckCircle2, Tv, RefreshCw, Key, AlertCircle, ChevronLeft, ChevronRight, Heart, Bookmark } from "lucide-react";
@@ -24,6 +26,8 @@ export default function App() {
   const [movies, setMovies] = useState<Movie[]>([]);
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedMovie, setSelectedMovie] = useState<Movie | null>(null);
+  const [showPlaylists, setShowPlaylists] = useState(false);
+  const [showWatchStats, setShowWatchStats] = useState(false);
   const [showAdminPanel, setShowAdminPanel] = useState(false);
   const [activeCategory, setActiveCategory] = useState<string>("هەمووی");
   const [isLoding, setIsLoading] = useState(true);
@@ -371,14 +375,30 @@ export default function App() {
         onLoginClick={handleLogin}
         onLogoutClick={handleLogout}
         onEditProfileClick={() => setIsEditProfileOpen(true)}
-        onAdminPanelToggle={() => setShowAdminPanel(!showAdminPanel)}
+        onAdminPanelToggle={() => {
+          setShowAdminPanel(!showAdminPanel);
+          setShowPlaylists(false);
+          setShowWatchStats(false);
+        }}
         showAdminPanel={showAdminPanel}
         searchQuery={searchQuery}
         setSearchQuery={setSearchQuery}
+        onPlaylistsToggle={() => {
+          setShowPlaylists(!showPlaylists);
+          setShowWatchStats(false);
+          setShowAdminPanel(false);
+          setSelectedMovie(null);
+        }}
+        onWatchStatsToggle={() => {
+          setShowWatchStats(!showWatchStats);
+          setShowPlaylists(false);
+          setShowAdminPanel(false);
+          setSelectedMovie(null);
+        }}
       />
 
       {/* Main Content Areas */}
-      <main className="min-h-[calc(100vh-230px)]">
+      <main className="min-h-[calc(100vh-230px)] animate-[fadeIn_0.4s_ease-out]">
         {showAdminPanel && isAdmin ? (
           /* Site Control Section for Admin (Kurdish) */
           <AdminPanel
@@ -389,6 +409,32 @@ export default function App() {
             onEditMovie={(movie) => {
               // Action when editing starts
             }}
+          />
+        ) : showPlaylists ? (
+          /* Advanced public/private custom playlists collections curation sub-system */
+          <UserPlaylists
+            user={user}
+            movies={movies}
+            onMovieSelect={(movie) => {
+              setSelectedMovie(movie);
+              setShowPlaylists(false);
+              window.history.pushState({}, "", `/?movie=${movie.id}`);
+            }}
+            onClose={() => setShowPlaylists(false)}
+            customDisplayName={customDisplayName}
+            customPhotoURL={customPhotoURL}
+          />
+        ) : showWatchStats ? (
+          /* Live Watch Time Stats, custom streaks counter & aggregated metrics analytics */
+          <WatchTimeStats
+            user={user}
+            movies={movies}
+            onMovieSelect={(movie) => {
+              setSelectedMovie(movie);
+              setShowWatchStats(false);
+              window.history.pushState({}, "", `/?movie=${movie.id}`);
+            }}
+            onClose={() => setShowWatchStats(false)}
           />
         ) : selectedMovie ? (
           /* Expanded details video screen overlay */
@@ -574,7 +620,11 @@ export default function App() {
                     {["هەمووی", "ترێندینگ", "فیلم", "زنجیرە", "فیلمی کوردی", "ئەنیمێ", "دۆکیومێنتاری", "دڵخوازەکانم", "لیستی بینین"].map((cat) => (
                       <button
                         key={cat}
-                        onClick={() => setActiveCategory(cat)}
+                        onClick={() => {
+                          setActiveCategory(cat);
+                          setShowPlaylists(false);
+                          setShowWatchStats(false);
+                        }}
                         className={`rounded-full px-5 py-2.5 text-xs font-bold font-sans transition-all duration-200 select-none flex items-center gap-1.5 cursor-pointer ${
                           activeCategory === cat
                             ? "bg-yellow-500 text-stone-950 shadow-[0_4px_12px_rgba(234,179,8,0.2)]"
