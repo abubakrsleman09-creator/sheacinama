@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { onAuthStateChanged, User as FirebaseUser } from "firebase/auth";
-import { collection, query, orderBy, onSnapshot, doc, updateDoc, increment, where, setDoc, deleteDoc } from "firebase/firestore";
+import { collection, query, orderBy, onSnapshot, doc, updateDoc, increment, where, setDoc, deleteDoc, addDoc } from "firebase/firestore";
 import { auth, signInWithPopup, signOut, googleProvider, db } from "./firebase";
 import { Movie } from "./types";
 import { handleFirestoreError, OperationType } from "./firestoreErrorHandler";
@@ -12,8 +12,7 @@ import MovieDetail from "./components/MovieDetail";
 import AdminPanel from "./components/AdminPanel";
 import AuthModal from "./components/AuthModal";
 import EditProfileModal from "./components/EditProfileModal";
-import UserPlaylists from "./components/UserPlaylists";
-import WatchTimeStats from "./components/WatchTimeStats";
+import OnlinePresenceWidget from "./components/OnlinePresenceWidget";
 
 // Import visual assets / vector components
 import { Film, Send, Sparkles, LogIn, Star, Play, CheckCircle2, Tv, RefreshCw, Key, AlertCircle, ChevronLeft, ChevronRight, Heart, Bookmark } from "lucide-react";
@@ -26,8 +25,6 @@ export default function App() {
   const [movies, setMovies] = useState<Movie[]>([]);
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedMovie, setSelectedMovie] = useState<Movie | null>(null);
-  const [showPlaylists, setShowPlaylists] = useState(false);
-  const [showWatchStats, setShowWatchStats] = useState(false);
   const [showAdminPanel, setShowAdminPanel] = useState(false);
   const [activeCategory, setActiveCategory] = useState<string>("هەمووی");
   const [isLoding, setIsLoading] = useState(true);
@@ -43,6 +40,136 @@ export default function App() {
   const [showAuthWarning, setShowAuthWarning] = useState(false);
   const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
 
+  // Active Watches Real-time Live State (100% Genuine)
+  const [activeSessions, setActiveSessions] = useState<any[]>([]);
+  const [onlineUsers, setOnlineUsers] = useState<any[]>([]);
+
+  // Real-time tracking of current visitor's presence
+  useEffect(() => {
+    // Generate or retrieve session ID
+    let sessionId = sessionStorage.getItem("shea_cinema_session_id");
+    if (!sessionId) {
+      sessionId = "sess_" + Math.random().toString(36).substring(2, 11);
+      sessionStorage.setItem("shea_cinema_session_id", sessionId);
+    }
+
+    const docRef = doc(db, "online_users", sessionId);
+
+    // Fetch user details safely
+    const userName = user 
+      ? (customDisplayName || user.displayName || user.email?.split("@")[0] || "بەکارهێنەر")
+      : "بینەری مێوان";
+    const userId = user ? user.uid : "guest";
+    const photoURL = customPhotoURL || user?.photoURL || "";
+    const userAgent = navigator.userAgent;
+    const enteredAt = new Date().toISOString();
+
+    // 1. Record the visit log once per session
+    const recordVisitLog = async () => {
+      const loggedKey = `logged_visit_${sessionId}`;
+      if (sessionStorage.getItem(loggedKey)) return;
+      
+      try {
+        await addDoc(collection(db, "visit_logs"), {
+          sessionId,
+          userId,
+          userName,
+          photoURL,
+          userAgent,
+          enteredAt
+        });
+        sessionStorage.setItem(loggedKey, "true");
+      } catch (err) {
+        console.warn("Failed to write visit log:", err);
+      }
+    };
+
+    recordVisitLog();
+
+    // 2. Heartbeat to keep presence active
+    const updatePresence = async () => {
+      try {
+        await setDoc(docRef, {
+          sessionId,
+          userId,
+          userName,
+          photoURL,
+          userAgent,
+          enteredAt,
+          lastActive: new Date().toISOString()
+        }, { merge: true });
+      } catch (err) {
+        console.warn("Failed to update presence:", err);
+      }
+    };
+
+    // Initial update
+    updatePresence();
+
+    // Repeat every 15 seconds
+    const interval = setInterval(updatePresence, 15000);
+
+    // Clean up on tab close / unmount
+    return () => {
+      clearInterval(interval);
+      deleteDoc(docRef).catch(err => {
+        console.warn("Failed to remove presence document on unmount:", err);
+      });
+    };
+  }, [user, customDisplayName, customPhotoURL]);
+
+  // Real-time synchronization of all online users
+  useEffect(() => {
+    const unsub = onSnapshot(collection(db, "online_users"), (snapshot) => {
+      const list: any[] = [];
+      const now = Date.now();
+      snapshot.forEach((docSnap) => {
+        const d = docSnap.data();
+        if (d.lastActive) {
+          const lastActiveTime = new Date(d.lastActive).getTime();
+          // Active in the last 25 seconds
+          if (now - lastActiveTime < 25000) {
+            list.push({
+              id: docSnap.id,
+              ...d
+            });
+          }
+        }
+      });
+      // Sort: newest entered first
+      list.sort((a, b) => new Date(b.enteredAt || 0).getTime() - new Date(a.enteredAt || 0).getTime());
+      setOnlineUsers(list);
+    }, (err) => {
+      console.warn("Global online users sync failed:", err);
+    });
+    return () => unsub();
+  }, []);
+
+  // Real-time synchronization for all active watches on the site
+  useEffect(() => {
+    const unsub = onSnapshot(collection(db, "active_watches"), (snapshot) => {
+      const list: any[] = [];
+      const now = Date.now();
+      snapshot.forEach((docSnap) => {
+        const d = docSnap.data();
+        if (d.lastActive) {
+          const lastActiveTime = new Date(d.lastActive).getTime();
+          // Keep sessions active if they updated in the last 22 seconds
+          if (now - lastActiveTime < 22000) {
+            list.push({
+              id: docSnap.id,
+              ...d
+            });
+          }
+        }
+      });
+      setActiveSessions(list);
+    }, (err) => {
+      console.warn("Global active watch sessions sync failed:", err);
+    });
+    return () => unsub();
+  }, [movies]);
+
   // Select movie and trigger views increment in Firestore
   const handleSelectMovie = async (movie: Movie) => {
     setSelectedMovie(movie);
@@ -55,6 +182,46 @@ export default function App() {
       });
     } catch (err) {
       console.warn("Failed to increment views:", err);
+    }
+  };
+
+  // Toggle Live Spotlight for any movie in real-time Firestore database
+  const handleSetLiveSpotlight = async (movieId: string) => {
+    if (!isAdmin) return;
+    try {
+      // 1. Unset any current spotlight movies
+      const spotlightSubs = movies.filter((m) => m.isLiveSpotlight);
+      for (const m of spotlightSubs) {
+        if (m.id !== movieId) {
+          await updateDoc(doc(db, "movies", m.id), { isLiveSpotlight: false });
+        }
+      }
+
+      // 2. Set the requested movie as live spotlight
+      const targetMovieRef = doc(db, "movies", movieId);
+      const isAlreadyOn = movies.find(m => m.id === movieId)?.isLiveSpotlight;
+      
+      // If already on, click again will turn off
+      await updateDoc(targetMovieRef, { 
+        isLiveSpotlight: !isAlreadyOn 
+      });
+
+      // 3. Optional: Add an elegant global live activity notification for other attendees!
+      if (!isAlreadyOn) {
+        const liveMovie = movies.find(m => m.id === movieId);
+        if (liveMovie) {
+          await addDoc(collection(db, "notifications"), {
+            userId: "public",
+            title: "فیلمی لایڤی نوێ دەستنیشانکرا! 🟡",
+            content: `فیلمی "${liveMovie.title}" بە فەرمی بۆ لایڤی هاوبەش دیاریکرا بە لاینی زەرد لەسەر بنەمای داواکاری تۆ!`,
+            type: "system",
+            createdAt: new Date().toISOString(),
+            isRead: false
+          });
+        }
+      }
+    } catch (err) {
+      console.error("Failed to set live movie spotlight:", err);
     }
   };
 
@@ -377,24 +544,10 @@ export default function App() {
         onEditProfileClick={() => setIsEditProfileOpen(true)}
         onAdminPanelToggle={() => {
           setShowAdminPanel(!showAdminPanel);
-          setShowPlaylists(false);
-          setShowWatchStats(false);
         }}
         showAdminPanel={showAdminPanel}
         searchQuery={searchQuery}
         setSearchQuery={setSearchQuery}
-        onPlaylistsToggle={() => {
-          setShowPlaylists(!showPlaylists);
-          setShowWatchStats(false);
-          setShowAdminPanel(false);
-          setSelectedMovie(null);
-        }}
-        onWatchStatsToggle={() => {
-          setShowWatchStats(!showWatchStats);
-          setShowPlaylists(false);
-          setShowAdminPanel(false);
-          setSelectedMovie(null);
-        }}
       />
 
       {/* Main Content Areas */}
@@ -409,32 +562,6 @@ export default function App() {
             onEditMovie={(movie) => {
               // Action when editing starts
             }}
-          />
-        ) : showPlaylists ? (
-          /* Advanced public/private custom playlists collections curation sub-system */
-          <UserPlaylists
-            user={user}
-            movies={movies}
-            onMovieSelect={(movie) => {
-              setSelectedMovie(movie);
-              setShowPlaylists(false);
-              window.history.pushState({}, "", `/?movie=${movie.id}`);
-            }}
-            onClose={() => setShowPlaylists(false)}
-            customDisplayName={customDisplayName}
-            customPhotoURL={customPhotoURL}
-          />
-        ) : showWatchStats ? (
-          /* Live Watch Time Stats, custom streaks counter & aggregated metrics analytics */
-          <WatchTimeStats
-            user={user}
-            movies={movies}
-            onMovieSelect={(movie) => {
-              setSelectedMovie(movie);
-              setShowWatchStats(false);
-              window.history.pushState({}, "", `/?movie=${movie.id}`);
-            }}
-            onClose={() => setShowWatchStats(false)}
           />
         ) : selectedMovie ? (
           /* Expanded details video screen overlay */
@@ -614,6 +741,8 @@ export default function App() {
                   </div>
                 )}
 
+
+
                 {/* Category Filtering Tabs banner */}
                 <div className="mx-auto max-w-7xl px-4 md:px-6 mt-12 mb-8 text-right rtl-dir">
                   <div className="flex flex-wrap gap-2 justify-start border-b border-stone-800/60 pb-5">
@@ -622,8 +751,6 @@ export default function App() {
                         key={cat}
                         onClick={() => {
                           setActiveCategory(cat);
-                          setShowPlaylists(false);
-                          setShowWatchStats(false);
                         }}
                         className={`rounded-full px-5 py-2.5 text-xs font-bold font-sans transition-all duration-200 select-none flex items-center gap-1.5 cursor-pointer ${
                           activeCategory === cat
@@ -687,6 +814,7 @@ export default function App() {
                               key={mov.id}
                               movie={mov}
                               onSelect={handleSelectMovie}
+                              activeSessions={activeSessions}
                             />
                           ))}
                         </div>
@@ -724,6 +852,7 @@ export default function App() {
                                   key={mov.id}
                                   movie={mov}
                                   onSelect={handleSelectMovie}
+                                  activeSessions={activeSessions}
                                 />
                               ))}
                           </div>
@@ -758,6 +887,7 @@ export default function App() {
                                   key={mov.id}
                                   movie={mov}
                                   onSelect={handleSelectMovie}
+                                  activeSessions={activeSessions}
                                 />
                               ))}
                           </div>
@@ -928,6 +1058,9 @@ export default function App() {
 
         </div>
       </footer>
+
+      {/* Floating Real-time Online Presence Widget */}
+      <OnlinePresenceWidget onlineUsers={onlineUsers} isAdmin={isAdmin} />
     </div>
   );
 

@@ -5,9 +5,10 @@ import { Movie } from "../types";
 export interface MovieCardProps {
   movie: Movie;
   onSelect: (movie: Movie) => void;
+  activeSessions?: any[];
 }
 
-const MovieCard: React.FC<MovieCardProps> = ({ movie, onSelect }) => {
+const MovieCard: React.FC<MovieCardProps> = ({ movie, onSelect, activeSessions }) => {
   // Safe Image fallback
   const handleImageError = (e: React.SyntheticEvent<HTMLImageElement, Event>) => {
     e.currentTarget.onerror = null; // Prevent looping
@@ -15,10 +16,13 @@ const MovieCard: React.FC<MovieCardProps> = ({ movie, onSelect }) => {
     e.currentTarget.src = "https://images.unsplash.com/photo-1489599849927-2ee91cede3ba?q=80&w=600&auto=format&fit=crop";
   };
 
+  // Extract the real-time watch sessions corresponding to this movie ID
+  const realWatchers = activeSessions ? activeSessions.filter((s) => s.movieId === movie.id).length : 0;
+
   return (
     <div
       onClick={() => onSelect(movie)}
-      className="group relative cursor-pointer overflow-hidden rounded-xl border border-stone-800 bg-[#121214] transition-all hover:border-yellow-500/40 hover:shadow-[0_8px_30px_rgb(234,179,8,0.1)] duration-300"
+      className="group relative cursor-pointer overflow-hidden rounded-xl border border-stone-800 bg-[#121214] hover:border-yellow-500/40 hover:shadow-[0_8px_30px_rgb(234,179,8,0.1)] transition-all duration-300"
     >
       {/* Poster Wraps */}
       <div className="relative aspect-[2/3] overflow-hidden bg-stone-900">
@@ -41,6 +45,11 @@ const MovieCard: React.FC<MovieCardProps> = ({ movie, onSelect }) => {
           </div>
         </div>
 
+        {/* Category badge */}
+        <div className="absolute top-3 right-3 rounded bg-yellow-500 px-2 py-0.5 text-[10px] font-bold text-stone-950 uppercase tracking-widest font-sans">
+          {movie.category}
+        </div>
+
         {/* Rating badge - Yellow style */}
         {movie.rating && (
           <div className="absolute top-3 left-3 flex items-center gap-1 rounded bg-stone-950/80 border border-yellow-500/20 px-2 py-0.5 text-xs font-bold text-yellow-400 backdrop-blur-md">
@@ -48,16 +57,11 @@ const MovieCard: React.FC<MovieCardProps> = ({ movie, onSelect }) => {
             <span>{movie.rating}</span>
           </div>
         )}
-
-        {/* Category badge */}
-        <div className="absolute top-3 right-3 rounded bg-yellow-500 px-2 py-0.5 text-[10px] font-bold text-stone-950 uppercase tracking-widest font-sans">
-          {movie.category}
-        </div>
       </div>
 
       {/* Meta Content bar */}
       <div className="p-3.5 text-right rtl-dir">
-        <h3 className="truncate font-sans text-sm font-semibold text-stone-100 group-hover:text-yellow-400 transition-colors">
+        <h3 className="truncate font-sans text-sm font-semibold transition-colors text-stone-100 group-hover:text-yellow-400">
           {movie.title}
         </h3>
         <div className="mt-1 flex items-center justify-between text-[11px] text-stone-400">

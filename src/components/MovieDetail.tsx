@@ -19,6 +19,15 @@ interface MovieDetailProps {
   onLoginClick: () => void;
 }
 
+const getSessionId = () => {
+  let id = sessionStorage.getItem("active_session_id");
+  if (!id) {
+    id = Math.random().toString(36).substring(2, 15) + Date.now().toString(36);
+    sessionStorage.setItem("active_session_id", id);
+  }
+  return id;
+};
+
 export default function MovieDetail({
   movie,
   onClose,
@@ -33,6 +42,48 @@ export default function MovieDetail({
 }: MovieDetailProps) {
   const [selectedServer, setSelectedServer] = useState<StreamServer | null>(null);
   const [lightsOff, setLightsOff] = useState(false);
+
+  // Real-time active watching session tracker (100% Real, syncs directly with Firestore)
+  useEffect(() => {
+    const sessionId = getSessionId();
+    const docRef = doc(db, "active_watches", sessionId);
+    
+    const registerActiveWatch = async () => {
+      try {
+        await setDoc(docRef, {
+          movieId: movie.id,
+          movieTitle: movie.title,
+          userId: user?.uid || "anonymous",
+          userName: customDisplayName || user?.displayName || "بینەری ناونیشان",
+          lastActive: new Date().toISOString()
+        });
+      } catch (err) {
+        console.warn("Error registering active watch session:", err);
+      }
+    };
+
+    registerActiveWatch();
+
+    // Pulse/heartbeat every 6 seconds to show active ping status
+    const interval = setInterval(async () => {
+      try {
+        await updateDoc(docRef, {
+          lastActive: new Date().toISOString()
+        });
+      } catch (err) {
+        // Recycle if document was lost
+        registerActiveWatch();
+      }
+    }, 6000);
+
+    // Clean up on unmount or when movie changes
+    return () => {
+      clearInterval(interval);
+      deleteDoc(docRef).catch((err) => {
+        console.warn("Error deleting active watch session:", err);
+      });
+    };
+  }, [movie.id, user?.uid, customDisplayName]);
   const [copied, setCopied] = useState(false);
   const [cinemaPreset, setCinemaPreset] = useState<"noir" | "neon" | "ember" | "gold">("noir");
 

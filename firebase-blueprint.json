@@ -94,6 +94,35 @@
         "createdAt": { "type": "string" }
       },
       "required": ["userId", "title", "message"]
+    },
+    "OnlineUser": {
+      "title": "OnlineUser",
+      "description": "Represents a user currently online on the site",
+      "type": "object",
+      "properties": {
+        "sessionId": { "type": "string" },
+        "userId": { "type": "string" },
+        "userName": { "type": "string" },
+        "photoURL": { "type": "string" },
+        "userAgent": { "type": "string" },
+        "enteredAt": { "type": "string", "format": "date-time" },
+        "lastActive": { "type": "string", "format": "date-time" }
+      },
+      "required": ["sessionId", "userId", "userName"]
+    },
+    "VisitLog": {
+      "title": "VisitLog",
+      "description": "Represents a single recorded user visit session",
+      "type": "object",
+      "properties": {
+        "sessionId": { "type": "string" },
+        "userId": { "type": "string" },
+        "userName": { "type": "string" },
+        "photoURL": { "type": "string" },
+        "userAgent": { "type": "string" },
+        "enteredAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["sessionId", "userId", "userName", "enteredAt"]
     }
   },
   "firestore": {
@@ -120,6 +149,14 @@
     "/notifications/{notificationId}": {
       "schema": "Notification",
       "description": "Notifications and global announcements feed"
+    },
+    "/online_users/{sessionId}": {
+      "schema": "OnlineUser",
+      "description": "Tracks real-time online presence of users"
+    },
+    "/visit_logs/{logId}": {
+      "schema": "VisitLog",
+      "description": "Tracks history of user and guest visits"
     }
   }
 }

@@ -1,7 +1,7 @@
 import React, { useState } from "react";
-import { Plus, Trash2, Edit, Save, PlusCircle, MinusCircle, AlertCircle, RefreshCw, Key, Upload, Image as ImageIcon, Sparkles } from "lucide-react";
+import { Plus, Trash2, Edit, Save, PlusCircle, MinusCircle, AlertCircle, RefreshCw, Key, Upload, Image as ImageIcon, Sparkles, Users, Clock, Monitor, Smartphone, Laptop, Globe, Activity } from "lucide-react";
 import { User as FirebaseUser } from "firebase/auth";
-import { collection, addDoc, updateDoc, deleteDoc, doc, serverTimestamp } from "firebase/firestore";
+import { collection, addDoc, updateDoc, deleteDoc, doc, serverTimestamp, onSnapshot, query, orderBy, limit, getDocs } from "firebase/firestore";
 import { db } from "../firebase";
 import { Movie, StreamServer, Season, Episode } from "../types";
 import { handleFirestoreError, OperationType } from "../firestoreErrorHandler";
@@ -22,6 +22,77 @@ export default function AdminPanel({
   onEditMovie,
 }: AdminPanelProps) {
   // Movie Form State
+  const [activeTab, setActiveTab] = useState<"movies" | "presence">("movies");
+  const [onlineUsers, setOnlineUsers] = useState<any[]>([]);
+  const [visitLogs, setVisitLogs] = useState<any[]>([]);
+  const [isClearingLogs, setIsClearingLogs] = useState(false);
+  const [isLoadingLogs, setIsLoadingLogs] = useState(false);
+
+  // Sync active presence and visit logs when on the presence tab
+  React.useEffect(() => {
+    if (activeTab !== "presence") return;
+
+    // 1. Listen to active online users in real-time
+    const unsubOnline = onSnapshot(collection(db, "online_users"), (snapshot) => {
+      const list: any[] = [];
+      const now = Date.now();
+      snapshot.forEach((docSnap) => {
+        const d = docSnap.data();
+        if (d.lastActive) {
+          const lastActiveTime = new Date(d.lastActive).getTime();
+          // Active in the last 25 seconds
+          if (now - lastActiveTime < 25000) {
+            list.push({ id: docSnap.id, ...d });
+          }
+        }
+      });
+      // Sort: newest entered first
+      list.sort((a, b) => new Date(b.enteredAt || 0).getTime() - new Date(a.enteredAt || 0).getTime());
+      setOnlineUsers(list);
+    }, (err) => {
+      console.warn("Admin panel online users sync failed:", err);
+    });
+
+    // 2. Listen to historical visit logs
+    setIsLoadingLogs(true);
+    const logsQuery = query(collection(db, "visit_logs"), orderBy("enteredAt", "desc"), limit(100));
+    const unsubLogs = onSnapshot(logsQuery, (snapshot) => {
+      const list: any[] = [];
+      snapshot.forEach((docSnap) => {
+        list.push({ id: docSnap.id, ...docSnap.data() });
+      });
+      setVisitLogs(list);
+      setIsLoadingLogs(false);
+    }, (err) => {
+      console.warn("Admin panel visit logs sync failed:", err);
+      setIsLoadingLogs(false);
+    });
+
+    return () => {
+      unsubOnline();
+      unsubLogs();
+    };
+  }, [activeTab]);
+
+  // Handle wiping visit logs from Firestore
+  const handleClearVisitLogs = async () => {
+    if (!window.confirm("ئایا دڵنیایت لە سڕینەوەی سەرجەم تۆمارەکانی سەردانیکردن؟")) return;
+    setIsClearingLogs(true);
+    try {
+      const q = query(collection(db, "visit_logs"));
+      const snap = await getDocs(q);
+      const promises = snap.docs.map(docSnap => deleteDoc(doc(db, "visit_logs", docSnap.id)));
+      await Promise.all(promises);
+      setSuccessMessage("سەرجەم تۆمارەکانی سەردانیکردن بە سەرکەوتوویی سڕانەوە.");
+      setErrorMessage("");
+    } catch (err) {
+      console.error("Failed to clear visit logs:", err);
+      setErrorMessage("سڕینەوەی تۆمارەکان سەرکەوتوو نەبوو.");
+    } finally {
+      setIsClearingLogs(false);
+    }
+  };
+
   const [editingMovieId, setEditingMovieId] = useState<string | null>(null);
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
@@ -483,6 +554,32 @@ export default function AdminPanel({
         </p>
       </div>
 
+      {/* Tab Switchers */}
+      <div className="flex gap-2.5 mb-8 border-b border-stone-850 pb-4">
+        <button
+          type="button"
+          onClick={() => setActiveTab("movies")}
+          className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-bold transition-all select-none cursor-pointer ${
+            activeTab === "movies"
+              ? "bg-yellow-500 text-stone-950 font-black shadow-[0_4px_12px_rgba(234,179,8,0.2)]"
+              : "bg-stone-900 border border-stone-800 text-stone-400 hover:text-stone-200"
+          }`}
+        >
+          <span>🎬 بەڕێوەبردنی کەتەلۆگ</span>
+        </button>
+        <button
+          type="button"
+          onClick={() => setActiveTab("presence")}
+          className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-bold transition-all select-none cursor-pointer ${
+            activeTab === "presence"
+              ? "bg-yellow-500 text-stone-950 font-black shadow-[0_4px_12px_rgba(234,179,8,0.2)]"
+              : "bg-stone-900 border border-stone-800 text-stone-400 hover:text-stone-200"
+          }`}
+        >
+          <span>👥 بینەرانی سەر هێڵ و تۆمارەکان</span>
+        </button>
+      </div>
+
       {/* Success / Error alert boxes */}
       {errorMessage && (
         <div className="mb-6 flex items-center gap-2.5 rounded-xl border border-red-500/20 bg-red-500/5 p-4 text-xs text-red-400">
@@ -498,8 +595,8 @@ export default function AdminPanel({
         </div>
       )}
 
-      {/* Admin Main Action Grid (Add Movie Form left, list right) */}
-      <div className="grid grid-cols-1 gap-8 lg:grid-cols-12">
+      {activeTab === "movies" ? (
+        <div className="grid grid-cols-1 gap-8 lg:grid-cols-12 animate-in fade-in-50 duration-200">
         {/* Form panel */}
         <div className="lg:col-span-7 bg-[#101012] border border-stone-800/80 rounded-2xl p-6">
           <h3 className="text-stone-100 text-sm font-bold font-sans mb-5 border-b border-stone-800 pb-3 flex justify-between items-center">
@@ -1001,6 +1098,157 @@ export default function AdminPanel({
           </div>
         </div>
       </div>
+      ) : (
+        /* Real-time Presence UI */
+        <div className="grid grid-cols-1 gap-8 lg:grid-cols-12 text-right animate-in fade-in-50 duration-200">
+          
+          {/* Left Column: Currently Online Users (lg:col-span-4) */}
+          <div className="lg:col-span-4 bg-[#101012] border border-stone-800/80 rounded-2xl p-6 flex flex-col h-[650px]">
+            <div className="flex items-center justify-between border-b border-stone-800 pb-3 mb-4 flex-row-reverse">
+              <div className="flex items-center gap-2 flex-row-reverse">
+                <span className="relative flex h-2.5 w-2.5">
+                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                  <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-emerald-500"></span>
+                </span>
+                <h3 className="text-stone-100 text-sm font-bold font-sans">بینەرانی ئێستای سەر هێڵ ({onlineUsers.length})</h3>
+              </div>
+              <Activity size={16} className="text-emerald-500 animate-pulse" />
+            </div>
+
+            <div className="flex-1 overflow-y-auto space-y-3.5 pr-1">
+              {onlineUsers.length === 0 ? (
+                <div className="h-full flex flex-col items-center justify-center text-stone-500 text-xs py-10 font-sans text-center">
+                  <span>هیچ کەسێک لەسەر هێڵ نییە لەم ساتەدا.</span>
+                </div>
+              ) : (
+                onlineUsers.map((item) => (
+                  <div
+                    key={item.id}
+                    className="flex items-center justify-between p-3 rounded-xl border border-stone-850 bg-[#161619] gap-3 flex-row-reverse"
+                  >
+                    {/* User profile image & name */}
+                    <div className="flex items-center gap-3 flex-row-reverse min-w-0">
+                      {item.photoURL ? (
+                        <img
+                          src={item.photoURL}
+                          alt=""
+                          className="h-8 w-8 rounded-full border border-stone-800 object-cover shrink-0"
+                          referrerPolicy="no-referrer"
+                        />
+                      ) : (
+                        <div className="h-8 w-8 rounded-full bg-stone-800 border border-stone-700 flex items-center justify-center text-xs font-bold text-stone-300 shrink-0">
+                          {item.userName ? item.userName.charAt(0) : "👤"}
+                        </div>
+                      )}
+                      <div className="text-right min-w-0">
+                        <h4 className="text-xs font-semibold text-stone-200 truncate font-sans">
+                          {item.userName}
+                        </h4>
+                        <p className="text-[9px] text-stone-500 font-sans">
+                          {item.userId === "guest" ? "مێوانی ئاسایی" : "بەکارهێنەری لۆگینکراو"}
+                        </p>
+                      </div>
+                    </div>
+
+                    {/* Device icon and entry time */}
+                    <div className="flex flex-col items-end gap-1 shrink-0">
+                      <div className="flex items-center gap-1 flex-row-reverse">
+                        {item.userAgent?.toLowerCase().includes("mobi") || item.userAgent?.toLowerCase().includes("android") || item.userAgent?.toLowerCase().includes("iphone") ? (
+                          <Smartphone size={12} className="text-yellow-500" />
+                        ) : (
+                          <Laptop size={12} className="text-emerald-400" />
+                        )}
+                        <span className="text-[9px] text-stone-400 font-mono">
+                          {item.userAgent?.toLowerCase().includes("iphone") ? "iPhone" : 
+                           item.userAgent?.toLowerCase().includes("android") ? "Android" : 
+                           item.userAgent?.toLowerCase().includes("windows") ? "Windows" : 
+                           item.userAgent?.toLowerCase().includes("mac") ? "Mac" : "وێب"}
+                        </span>
+                      </div>
+                      <span className="text-[8px] text-stone-500 font-sans">
+                        {item.enteredAt ? `سەرەتای لۆگین: ${new Date(item.enteredAt).toLocaleTimeString("en-US", { hour: '2-digit', minute: '2-digit' })}` : "ناچالاك"}
+                      </span>
+                    </div>
+                  </div>
+                ))
+              )}
+            </div>
+          </div>
+
+          {/* Right Column: Historical Visit Logs (lg:col-span-8) */}
+          <div className="lg:col-span-8 bg-[#101012] border border-stone-800/80 rounded-2xl p-6 flex flex-col h-[650px]">
+            <div className="flex items-center justify-between border-b border-stone-800 pb-3 mb-4 flex-row-reverse">
+              <div className="flex items-center gap-2 flex-row-reverse">
+                <Clock size={16} className="text-yellow-500" />
+                <h3 className="text-stone-100 text-sm font-bold font-sans">مێژووی لۆگی سەردانیکردن (دواین ١٠٠ سەردان)</h3>
+              </div>
+              <button
+                type="button"
+                onClick={handleClearVisitLogs}
+                disabled={isClearingLogs || visitLogs.length === 0}
+                className="text-[10px] bg-red-500/10 border border-red-500/20 hover:bg-red-500/20 text-red-400 px-3 py-1.5 rounded-xl transition-all font-sans font-bold flex items-center gap-1 cursor-pointer disabled:opacity-40"
+              >
+                <Trash2 size={11} />
+                <span>پاککردنەوەی لۆگەکان</span>
+              </button>
+            </div>
+
+            <div className="flex-1 overflow-y-auto space-y-2.5 pr-1">
+              {isLoadingLogs ? (
+                <div className="h-full flex items-center justify-center text-stone-500 text-xs py-10 font-sans">
+                  <RefreshCw className="animate-spin text-yellow-500 mr-2" size={16} />
+                  <span>باردەکرێت...</span>
+                </div>
+              ) : visitLogs.length === 0 ? (
+                <div className="h-full flex flex-col items-center justify-center text-stone-500 text-xs py-10 font-sans text-center">
+                  <span>هیچ مێژوویەک لە داتابەیسەکەدا تۆمار نەکراوە.</span>
+                </div>
+              ) : (
+                visitLogs.map((log) => (
+                  <div
+                    key={log.id}
+                    className="flex items-center justify-between p-3 rounded-xl border border-stone-850/60 bg-[#141416]/50 hover:bg-[#141416] transition-colors gap-4 flex-row-reverse"
+                  >
+                    {/* Visitor name */}
+                    <div className="flex items-center gap-3 flex-row-reverse min-w-0">
+                      <div className="h-7 w-7 rounded-full bg-stone-800 border border-stone-700 flex items-center justify-center text-[10px] font-bold text-stone-400 shrink-0">
+                        {log.userName?.charAt(0) || "👤"}
+                      </div>
+                      <div className="text-right min-w-0">
+                        <span className="text-xs font-semibold text-stone-300 truncate block font-sans">
+                          {log.userName}
+                        </span>
+                        <span className="text-[9px] text-stone-500 font-mono block">
+                          ID: {log.userId === "guest" ? "مێوان" : log.userId.slice(0, 8)}
+                        </span>
+                      </div>
+                    </div>
+
+                    {/* Meta info of the visitor */}
+                    <div className="flex items-center gap-6 flex-row-reverse shrink-0">
+                      {/* Browser Agent details */}
+                      <div className="text-right text-[9px] text-stone-500 max-w-[150px] truncate hidden sm:block font-mono font-sans">
+                        {log.userAgent || "Unknown Device"}
+                      </div>
+
+                      {/* Visited Date & Time */}
+                      <div className="text-right shrink-0">
+                        <span className="text-[10px] text-stone-300 font-mono block">
+                          {log.enteredAt ? new Date(log.enteredAt).toLocaleDateString("en-US", { month: "short", day: "numeric" }) : ""}
+                        </span>
+                        <span className="text-[9px] text-stone-500 font-mono block">
+                          {log.enteredAt ? new Date(log.enteredAt).toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit", second: "2-digit" }) : ""}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                ))
+              )}
+            </div>
+          </div>
+
+        </div>
+      )}
     </div>
   );
 }

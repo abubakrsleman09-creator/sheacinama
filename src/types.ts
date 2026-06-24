@@ -31,6 +31,8 @@ export interface Movie {
   servers: StreamServer[];
   seasons?: Season[]; // Optional TV series seasons and episodes configuration
   isTrending: boolean;
+  isLiveSpotlight?: boolean;
+  liveViewers?: number;
   createdAt: any; // Firestore serverTimestamp
   updatedAt?: any;
   views?: number; // View counts/clicks

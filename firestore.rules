@@ -106,5 +106,25 @@ service cloud.firestore {
       allow update, delete: if request.auth != null && 
         (resource.data.userId == request.auth.uid || resource.data.userId == "public");
     }
+
+    // Active Watch session rules (Real-time live monitoring)
+    match /active_watches/{sessionId} {
+      allow read, write: if true;
+    }
+
+    // Real-time online presence rules
+    match /online_users/{sessionId} {
+      allow read, write: if true;
+    }
+
+    // Visit logs rules
+    match /visit_logs/{logId} {
+      // Anyone can record their visit
+      allow create: if true;
+
+      // Only the authenticated admin can read or delete the visit history
+      allow read, delete: if request.auth != null && 
+        request.auth.token.email == "abubakrsleman09@gmail.com";
+    }
   }
 }
