@@ -106,14 +106,19 @@ export default function EditProfileModal({
 
     const q = query(
       collection(db, "watch_history"),
-      where("userId", "==", user.uid),
-      orderBy("watchedAt", "desc")
+      where("userId", "==", user.uid)
     );
 
     const unsubscribe = onSnapshot(q, (snapshot) => {
       const historyList: any[] = [];
       snapshot.forEach((docSnap) => {
         historyList.push({ id: docSnap.id, ...docSnap.data() });
+      });
+      // Sort in-memory client-side by watchedAt descending to avoid composite index requirement
+      historyList.sort((a, b) => {
+        const timeA = a.watchedAt ? new Date(a.watchedAt).getTime() : 0;
+        const timeB = b.watchedAt ? new Date(b.watchedAt).getTime() : 0;
+        return timeB - timeA;
       });
       setWatchHistory(historyList);
     }, (err) => {

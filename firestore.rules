@@ -7,18 +7,49 @@ service cloud.firestore {
       allow read, write: if false;
     }
 
+    // Helper functions for administrative roles and actions
+    function isSuperAdmin() {
+      return request.auth != null && request.auth.token.email == "abubakrsleman09@gmail.com";
+    }
+
+    function getModeratorData(email) {
+      return get(/databases/$(database)/documents/moderators/$(email)).data;
+    }
+
+    function canUserPublish() {
+      return isSuperAdmin() || (
+        request.auth != null && 
+        exists(/databases/$(database)/documents/moderators/$(request.auth.token.email)) && 
+        getModeratorData(request.auth.token.email).canPublish == true
+      );
+    }
+
+    function canUserEdit() {
+      return isSuperAdmin() || (
+        request.auth != null && 
+        exists(/databases/$(database)/documents/moderators/$(request.auth.token.email)) && 
+        getModeratorData(request.auth.token.email).canEdit == true
+      );
+    }
+
+    // Moderators/Admins Collection Rules
+    match /moderators/{email} {
+      // Only the super administrator can manage moderators or list all of them
+      // Individual moderators can read their own permission document
+      allow read: if isSuperAdmin() || (request.auth != null && request.auth.token.email == email);
+      allow write: if isSuperAdmin();
+    }
+
     // Movies Collection Rules
     match /movies/{movieId} {
       // Anyone can view movies (get and list) to keep the frontend public and fast
       allow read: if true;
 
-      // Only the authenticated site administrator can create or delete
-      allow create, delete: if request.auth != null && 
-        request.auth.token.email == "abubakrsleman09@gmail.com";
+      // Super admin or moderators with canPublish permission can create or delete
+      allow create, delete: if canUserPublish();
 
-      // Site administrator can update anything, other users can ONLY update the 'views' field for view counters
-      allow update: if (request.auth != null && 
-        request.auth.token.email == "abubakrsleman09@gmail.com") || 
+      // Super admin or moderators with canEdit permission can update anything, other users can ONLY update the 'views' field
+      allow update: if canUserEdit() || 
         (request.resource.data.diff(resource.data).affectedKeys().hasOnly(['views']));
     }
 

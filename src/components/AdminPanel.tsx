@@ -1,7 +1,7 @@
 import React, { useState } from "react";
 import { Plus, Trash2, Edit, Save, PlusCircle, MinusCircle, AlertCircle, RefreshCw, Key, Upload, Image as ImageIcon, Sparkles, Users, Clock, Monitor, Smartphone, Laptop, Globe, Activity } from "lucide-react";
 import { User as FirebaseUser } from "firebase/auth";
-import { collection, addDoc, updateDoc, deleteDoc, doc, serverTimestamp, onSnapshot, query, orderBy, limit, getDocs } from "firebase/firestore";
+import { collection, addDoc, updateDoc, deleteDoc, doc, serverTimestamp, onSnapshot, query, orderBy, limit, getDocs, setDoc } from "firebase/firestore";
 import { db } from "../firebase";
 import { Movie, StreamServer, Season, Episode } from "../types";
 import { handleFirestoreError, OperationType } from "../firestoreErrorHandler";
@@ -9,6 +9,7 @@ import { handleFirestoreError, OperationType } from "../firestoreErrorHandler";
 interface AdminPanelProps {
   user: FirebaseUser | null;
   isAdmin: boolean;
+  userPermissions?: { canPublish: boolean; canEdit: boolean } | null;
   movies: Movie[];
   onMovieSaved: () => void;
   onEditMovie: (movie: Movie) => void;
@@ -17,20 +18,37 @@ interface AdminPanelProps {
 export default function AdminPanel({
   user,
   isAdmin,
+  userPermissions,
   movies,
   onMovieSaved,
   onEditMovie,
 }: AdminPanelProps) {
   // Movie Form State
-  const [activeTab, setActiveTab] = useState<"movies" | "presence">("movies");
+  const [activeTab, setActiveTab] = useState<"movies" | "presence" | "analytics" | "admins">("movies");
   const [onlineUsers, setOnlineUsers] = useState<any[]>([]);
   const [visitLogs, setVisitLogs] = useState<any[]>([]);
   const [isClearingLogs, setIsClearingLogs] = useState(false);
   const [isLoadingLogs, setIsLoadingLogs] = useState(false);
 
-  // Sync active presence and visit logs when on the presence tab
+  // Dynamic moderator / admin variables
+  const [moderators, setModerators] = useState<any[]>([]);
+  const [newAdminEmail, setNewAdminEmail] = useState("");
+  const [newCanPublish, setNewCanPublish] = useState(false);
+  const [newCanEdit, setNewCanEdit] = useState(false);
+  const [isAdminSubmitting, setIsAdminSubmitting] = useState(false);
+
+  // Compute actual actions capabilities
+  const isSuperAdmin = user?.email === "abubakrsleman09@gmail.com";
+  const canPublish = isSuperAdmin || (userPermissions ? !!userPermissions.canPublish : false);
+  const canEdit = isSuperAdmin || (userPermissions ? !!userPermissions.canEdit : false);
+
+  // Interactive analytics states
+  const [selectedGenre, setSelectedGenre] = useState<string | null>(null);
+  const [selectedDayIndex, setSelectedDayIndex] = useState<number | null>(null);
+
+  // Sync active presence and visit logs when on the presence or analytics tab
   React.useEffect(() => {
-    if (activeTab !== "presence") return;
+    if (activeTab === "movies") return;
 
     // 1. Listen to active online users in real-time
     const unsubOnline = onSnapshot(collection(db, "online_users"), (snapshot) => {
@@ -331,8 +349,93 @@ export default function AdminPanel({
     setServers(updated);
   };
 
+  // Synchronize moderators collection when on the admins tab
+  React.useEffect(() => {
+    if (activeTab !== "admins" || !isSuperAdmin) return;
+
+    const unsubMods = onSnapshot(collection(db, "moderators"), (snapshot) => {
+      const list: any[] = [];
+      snapshot.forEach((docSnap) => {
+        list.push({ id: docSnap.id, ...docSnap.data() });
+      });
+      setModerators(list);
+    }, (err) => {
+      console.warn("Admin panel moderators sync failed:", err);
+    });
+
+    return () => {
+      unsubMods();
+    };
+  }, [activeTab, isSuperAdmin]);
+
+  const handleAddModerator = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!isSuperAdmin) return;
+    if (!newAdminEmail.trim()) {
+      setErrorMessage("تکایە ئیمەیڵی ئەدمینی نوێ بنووسە.");
+      return;
+    }
+    setIsAdminSubmitting(true);
+    setErrorMessage("");
+    setSuccessMessage("");
+    try {
+      const emailLower = newAdminEmail.trim().toLowerCase();
+      const docRef = doc(db, "moderators", emailLower);
+      await setDoc(docRef, {
+        email: emailLower,
+        role: "moderator",
+        canPublish: newCanPublish,
+        canEdit: newCanEdit,
+        createdAt: serverTimestamp(),
+        addedBy: user?.email || "abubakrsleman09@gmail.com",
+      });
+      setSuccessMessage(`ئەدمینی نوێ (${emailLower}) بە سەرکەوتوویی زیادکرا.`);
+      setNewAdminEmail("");
+      setNewCanPublish(false);
+      setNewCanEdit(false);
+    } catch (err) {
+      console.error("Failed to add moderator:", err);
+      setErrorMessage("زیادکردنی ئەدمین سەرکەوتوو نەبوو. تکایە دڵنیابەرەوە لە مۆڵەتەکان.");
+    } finally {
+      setIsAdminSubmitting(false);
+    }
+  };
+
+  const handleRemoveModerator = async (email: string) => {
+    if (!isSuperAdmin) return;
+    if (!window.confirm(`ئایا دڵنیایت لە سڕینەوەی ئەم ئەدمینە؟ (${email})`)) return;
+    setErrorMessage("");
+    setSuccessMessage("");
+    try {
+      await deleteDoc(doc(db, "moderators", email));
+      setSuccessMessage(`ئەدمین (${email}) بە سەرکەوتوویی لابرا.`);
+    } catch (err) {
+      console.error("Failed to remove moderator:", err);
+      setErrorMessage("لابرانی ئەدمین سەرکەوتوو نەبوو.");
+    }
+  };
+
+  const handleToggleModeratorPermission = async (email: string, field: "canPublish" | "canEdit", currentValue: boolean) => {
+    if (!isSuperAdmin) return;
+    setErrorMessage("");
+    setSuccessMessage("");
+    try {
+      await updateDoc(doc(db, "moderators", email), {
+        [field]: !currentValue,
+      });
+      setSuccessMessage("دەسەڵاتی ئەدمین بە سەرکەوتوویی هەموارکرا.");
+    } catch (err) {
+      console.error("Failed to update moderator permission:", err);
+      setErrorMessage("هەموارکردنی دەسەڵات سەرکەوتوو نەبوو.");
+    }
+  };
+
   // Seed default sample movies into Firestore database
   const handleSeedDefaultMovies = async () => {
+    if (!canPublish) {
+      setErrorMessage("ببوورە! تۆ دەسەڵاتی بڵاوکردنەوە یان نووسینەوەی کەتەلۆگت نییە.");
+      return;
+    }
     setIsSeeding(true);
     setErrorMessage("");
     setSuccessMessage("");
@@ -456,6 +559,10 @@ export default function AdminPanel({
 
   // Delete a movie from Firestore
   const handleDeleteMovie = async (movieId: string) => {
+    if (!canPublish) {
+      setErrorMessage("ببوورە! تۆ دەسەڵاتی سڕینەوەی بابەتەکانت نییە.");
+      return;
+    }
     if (!window.confirm("ئایا دڵنیای لە سڕینەوەی ئەم بابەتە؟")) return;
     setErrorMessage("");
     setSuccessMessage("");
@@ -485,6 +592,18 @@ export default function AdminPanel({
     if (!title || !posterUrl) {
       setErrorMessage("تکایە ناونیشان و بەستەری پۆستەر بنوسە.");
       return;
+    }
+
+    if (editingMovieId) {
+      if (!canEdit) {
+        setErrorMessage("ببوورە! تۆ دەسەڵاتی دەستکاری کردنی زانیاری بابەتەکانت نییە.");
+        return;
+      }
+    } else {
+      if (!canPublish) {
+        setErrorMessage("ببوورە! تۆ دەسەڵاتی بڵاوکردنەوەی بابەتی نوێ لەم سایتەدا نییە.");
+        return;
+      }
     }
 
     setIsSubmitting(true);
@@ -555,7 +674,7 @@ export default function AdminPanel({
       </div>
 
       {/* Tab Switchers */}
-      <div className="flex gap-2.5 mb-8 border-b border-stone-850 pb-4">
+      <div className="flex flex-wrap gap-2.5 mb-8 border-b border-stone-850 pb-4">
         <button
           type="button"
           onClick={() => setActiveTab("movies")}
@@ -578,6 +697,34 @@ export default function AdminPanel({
         >
           <span>👥 بینەرانی سەر هێڵ و تۆمارەکان</span>
         </button>
+        <button
+          type="button"
+          onClick={() => {
+            setActiveTab("analytics");
+            setSelectedGenre(null);
+            setSelectedDayIndex(null);
+          }}
+          className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-bold transition-all select-none cursor-pointer ${
+            activeTab === "analytics"
+              ? "bg-yellow-500 text-stone-950 font-black shadow-[0_4px_12px_rgba(234,179,8,0.2)]"
+              : "bg-stone-900 border border-stone-800 text-stone-400 hover:text-stone-200"
+          }`}
+        >
+          <span>📊 بۆردی ئامارەکان (هێڵکاری)</span>
+        </button>
+        {isSuperAdmin && (
+          <button
+            type="button"
+            onClick={() => setActiveTab("admins")}
+            className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-bold transition-all select-none cursor-pointer ${
+              activeTab === "admins"
+                ? "bg-yellow-500 text-stone-950 font-black shadow-[0_4px_12px_rgba(234,179,8,0.2)]"
+                : "bg-stone-900 border border-stone-800 text-stone-400 hover:text-stone-200"
+            }`}
+          >
+            <span>🛡️ بەڕێوەبردنی دەسەڵاتەکان</span>
+          </button>
+        )}
       </div>
 
       {/* Success / Error alert boxes */}
@@ -1098,7 +1245,7 @@ export default function AdminPanel({
           </div>
         </div>
       </div>
-      ) : (
+      ) : activeTab === "presence" ? (
         /* Real-time Presence UI */
         <div className="grid grid-cols-1 gap-8 lg:grid-cols-12 text-right animate-in fade-in-50 duration-200">
           
@@ -1245,6 +1392,606 @@ export default function AdminPanel({
                 ))
               )}
             </div>
+          </div>
+
+        </div>
+      ) : activeTab === "admins" && isSuperAdmin ? (
+        /* Administrator & Permissions Management Panel */
+        <div className="grid grid-cols-1 gap-8 lg:grid-cols-12 text-right animate-in fade-in-50 duration-200">
+          
+          {/* Add Admin Form Column (lg:col-span-5) */}
+          <div className="lg:col-span-5 bg-[#101012] border border-stone-800/80 rounded-2xl p-6">
+            <h3 className="text-stone-100 text-sm font-bold font-sans mb-5 border-b border-stone-800 pb-3 flex items-center justify-between flex-row-reverse">
+              <span className="flex items-center gap-2 flex-row-reverse">
+                <Users size={16} className="text-yellow-400" />
+                <span>زیادکردنی ئەدمینی نوێ</span>
+              </span>
+            </h3>
+
+            <form onSubmit={handleAddModerator} className="space-y-4">
+              <div>
+                <label className="block text-xs font-semibold text-stone-400 font-sans mb-1.5 text-right">ئیمەیڵی فایەربەیسی بەکارهێنەر (پێویستە)</label>
+                <input
+                  type="email"
+                  required
+                  value={newAdminEmail}
+                  onChange={(e) => setNewAdminEmail(e.target.value)}
+                  placeholder="user@example.com"
+                  className="w-full text-xs rounded-xl border border-stone-800 bg-[#161619] px-4 py-3 text-stone-100 focus:border-yellow-500/50 focus:outline-none text-left font-mono"
+                />
+                <p className="text-[10px] text-stone-500 mt-1.5 font-sans leading-relaxed text-right">
+                  تێبینی: ئیمەیڵەکە دەبێت هاوشێوەی ئیمەیڵی چوونەژوورەوەی جیمەیڵەکەی بێت تاوەکو سیستەمەکە بتوانێت بیناسێتەوە.
+                </p>
+              </div>
+
+              {/* Permissions checkboxes */}
+              <div className="bg-[#141416] border border-stone-850 rounded-xl p-4 space-y-3">
+                <span className="text-xs font-bold text-stone-300 block mb-1 text-right">دیاریکردنی دەسەڵاتەکان:</span>
+                
+                <div className="flex items-start gap-3 select-none flex-row-reverse">
+                  <input
+                    type="checkbox"
+                    id="canPublishCheck"
+                    checked={newCanPublish}
+                    onChange={(e) => setNewCanPublish(e.target.checked)}
+                    className="mt-0.5 h-4 w-4 rounded border-stone-800 bg-[#161619] text-yellow-500 focus:ring-yellow-500/30 cursor-pointer"
+                  />
+                  <div className="text-right">
+                    <label htmlFor="canPublishCheck" className="text-xs font-bold text-stone-200 cursor-pointer block">
+                      بڵاوکردنەوە و سڕینەوە (Publish & Delete)
+                    </label>
+                    <p className="text-[10px] text-stone-400 mt-0.5 leading-relaxed">
+                      ڕێگەدان بە بڵاوکردنەوەی فیلمی نوێ یان سڕینەوەی فیلمە کۆنەکان لە کەتەلۆگ.
+                    </p>
+                  </div>
+                </div>
+
+                <div className="flex items-start gap-3 select-none pt-2 border-t border-stone-800/40 flex-row-reverse">
+                  <input
+                    type="checkbox"
+                    id="canEditCheck"
+                    checked={newCanEdit}
+                    onChange={(e) => setNewCanEdit(e.target.checked)}
+                    className="mt-0.5 h-4 w-4 rounded border-stone-800 bg-[#161619] text-yellow-500 focus:ring-yellow-500/30 cursor-pointer"
+                  />
+                  <div className="text-right">
+                    <label htmlFor="canEditCheck" className="text-xs font-bold text-stone-200 cursor-pointer block">
+                      دەستکاری کردن و نوێکردنەوە (Edit & Update)
+                    </label>
+                    <p className="text-[10px] text-stone-400 mt-0.5 leading-relaxed">
+                      ڕێگەدان بە دەستکاری کردن و نوێکردنەوەی فیلمە بڵاوکراوەکان لەگەڵ سێرڤەرەکان.
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              <button
+                type="submit"
+                disabled={isAdminSubmitting}
+                className="w-full rounded-xl bg-yellow-500 hover:bg-yellow-400 text-stone-950 font-black py-3 text-xs transition-all duration-200 shadow-lg shadow-yellow-500/10 active:scale-[0.98] disabled:opacity-50 flex items-center justify-center gap-1.5 cursor-pointer"
+              >
+                {isAdminSubmitting ? (
+                  <>
+                    <RefreshCw className="animate-spin" size={13} />
+                    <span>تۆمار دەکرێت...</span>
+                  </>
+                ) : (
+                  <>
+                    <Plus size={14} className="stroke-[2.5]" />
+                    <span>زیادکردنی بەکارهێنەر وەک ئەدمین</span>
+                  </>
+                )}
+              </button>
+            </form>
+          </div>
+
+          {/* Existing Admins List Column (lg:col-span-7) */}
+          <div className="lg:col-span-7 bg-[#101012] border border-stone-800/80 rounded-2xl p-6 flex flex-col min-h-[500px]">
+            <h3 className="text-stone-100 text-sm font-bold font-sans mb-4 border-b border-stone-800 pb-3 flex justify-between items-center flex-row-reverse">
+              <span className="font-sans text-stone-400 font-normal text-xs">ژمارە: ({moderators.length + 1})</span>
+              <span>ئەدمین و مۆدێراتۆرە چالاکەکان</span>
+            </h3>
+
+            <div className="flex-1 overflow-y-auto space-y-3.5 pr-1">
+              {/* Super Admin Row (Permanent) */}
+              <div className="flex items-center justify-between p-4 rounded-xl border border-yellow-500/15 bg-yellow-500/[0.02] gap-3 flex-row-reverse">
+                <div className="flex items-center gap-3 flex-row-reverse text-right">
+                  <div className="h-9 w-9 rounded-full bg-yellow-500/10 border border-yellow-500/20 flex items-center justify-center text-yellow-400 shrink-0">
+                    <Key size={16} />
+                  </div>
+                  <div>
+                    <h4 className="text-xs font-bold text-yellow-400 flex items-center gap-1.5 justify-start flex-row-reverse font-sans">
+                      <span className="font-mono">abubakrsleman09@gmail.com</span>
+                      <span className="bg-yellow-500 text-stone-950 text-[8px] font-black px-1.5 py-0.5 rounded uppercase font-sans">Super Admin</span>
+                    </h4>
+                    <p className="text-[10px] text-stone-500 font-sans mt-0.5">بەڕێوبەری سەرەکی پەیج و خاوەنی مۆڵەتە باڵاکان</p>
+                  </div>
+                </div>
+                
+                <div className="flex gap-2 text-stone-400 font-sans text-[10px]">
+                  <span className="bg-emerald-500/10 text-emerald-400 border border-emerald-500/15 px-2 py-1 rounded-lg">بڵاوکردنەوە ✓</span>
+                  <span className="bg-emerald-500/10 text-emerald-400 border border-emerald-500/15 px-2 py-1 rounded-lg">دەستکاری ✓</span>
+                </div>
+              </div>
+
+              {/* Added Moderators List */}
+              {moderators.length === 0 ? (
+                <div className="py-20 text-center text-stone-500 text-xs font-sans border border-dashed border-stone-850 rounded-xl bg-stone-900/5">
+                  هیچ ئەدمینێکی تر نییە لە کاتژمێردا. دەتوانیت لە فۆرمی لای چەپەوە مۆدێراتۆر زیاد بکەیت!
+                </div>
+              ) : (
+                moderators.map((mod) => (
+                  <div
+                    key={mod.id}
+                    className="flex items-center justify-between p-4 rounded-xl border border-stone-800 bg-[#161619] gap-3 flex-row-reverse hover:border-stone-750 transition-colors"
+                  >
+                    <div className="flex items-center gap-3 flex-row-reverse text-right">
+                      <div className="h-9 w-9 rounded-full bg-stone-800 border border-stone-700 flex items-center justify-center text-stone-400 shrink-0 font-bold text-xs font-sans">
+                        Mod
+                      </div>
+                      <div>
+                        <h4 className="text-xs font-bold text-stone-200 font-mono text-right">{mod.email}</h4>
+                        <p className="text-[9px] text-stone-500 font-sans mt-0.5 text-right">
+                          زیادکراوە لە لایەن: {mod.addedBy || "Super Admin"}
+                        </p>
+                      </div>
+                    </div>
+
+                    {/* Interactive Toggles & Delete button */}
+                    <div className="flex items-center gap-3">
+                      <div className="flex gap-1.5 font-sans text-[9px]">
+                        <button
+                          type="button"
+                          onClick={() => handleToggleModeratorPermission(mod.email, "canPublish", !!mod.canPublish)}
+                          className={`px-2.5 py-1 rounded-lg border transition-all cursor-pointer ${
+                            mod.canPublish
+                              ? "bg-emerald-500/10 text-emerald-400 border-emerald-500/20 hover:bg-emerald-500/15"
+                              : "bg-stone-900 text-stone-500 border-stone-800 hover:text-stone-400"
+                          }`}
+                          title="کلیک بکە بۆ گۆڕینی دەسەڵاتی بڵاوکردنەوە"
+                        >
+                          {mod.canPublish ? "بڵاوکردنەوە ✓" : "بڵاوکردنەوە ✗"}
+                        </button>
+
+                        <button
+                          type="button"
+                          onClick={() => handleToggleModeratorPermission(mod.email, "canEdit", !!mod.canEdit)}
+                          className={`px-2.5 py-1 rounded-lg border transition-all cursor-pointer ${
+                            mod.canEdit
+                              ? "bg-emerald-500/10 text-emerald-400 border-emerald-500/20 hover:bg-emerald-500/15"
+                              : "bg-stone-900 text-stone-500 border-stone-800 hover:text-stone-400"
+                          }`}
+                          title="کلیک بکە بۆ گۆڕینی دەسەڵاتی دەستکاری کردن"
+                        >
+                          {mod.canEdit ? "دەستکاری ✓" : "دەستکاری ✗"}
+                        </button>
+                      </div>
+
+                      <button
+                        type="button"
+                        onClick={() => handleRemoveModerator(mod.email)}
+                        className="p-2 rounded-lg bg-stone-900 border border-stone-800 text-stone-500 hover:text-red-400 hover:border-red-500/20 cursor-pointer transition-all active:scale-95"
+                        title="سڕینەوەی ئەم ئەدمینە"
+                      >
+                        <Trash2 size={13} />
+                      </button>
+                    </div>
+                  </div>
+                ))
+              )}
+            </div>
+          </div>
+        </div>
+      ) : (
+        /* Interactive Analytics & Charts Dashboard */
+        <div className="space-y-5 sm:space-y-8 text-right animate-in fade-in-50 duration-200 font-sans">
+          
+          {/* Quick Metrics Cards row */}
+          <div className="grid grid-cols-2 gap-2 sm:gap-4 sm:grid-cols-4">
+            <div className="bg-[#101012] border border-stone-850 p-3 sm:p-4 rounded-2xl flex flex-col items-center justify-center text-center">
+              <span className="text-stone-500 text-[9px] sm:text-[10px] uppercase font-bold tracking-wider">سەرجەم کەتەلۆگ</span>
+              <span className="text-xl sm:text-2xl font-black text-yellow-400 mt-0.5 sm:mt-1 font-mono">{movies.length}</span>
+              <span className="text-stone-400 text-[8px] sm:text-[9px] mt-0.5">فیلم و زنجیرە</span>
+            </div>
+            
+            <div className="bg-[#101012] border border-stone-850 p-3 sm:p-4 rounded-2xl flex flex-col items-center justify-center text-center">
+              <span className="text-stone-500 text-[9px] sm:text-[10px] uppercase font-bold tracking-wider">بینەرانی سەر هێڵ</span>
+              <span className="text-xl sm:text-2xl font-black text-emerald-400 mt-0.5 sm:mt-1 font-mono flex items-center gap-1 sm:gap-1.5 justify-center">
+                <span className="relative flex h-1.5 w-1.5 sm:h-2 sm:w-2">
+                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                  <span className="relative inline-flex rounded-full h-1.5 w-1.5 sm:h-2 sm:w-2 bg-emerald-500"></span>
+                </span>
+                {onlineUsers.length}
+              </span>
+              <span className="text-stone-400 text-[8px] sm:text-[9px] mt-0.5">لە خولەکی ئێستادا</span>
+            </div>
+
+            <div className="bg-[#101012] border border-stone-850 p-3 sm:p-4 rounded-2xl flex flex-col items-center justify-center text-center">
+              <span className="text-stone-500 text-[9px] sm:text-[10px] uppercase font-bold tracking-wider">سەردانیکردنی گشتی</span>
+              <span className="text-xl sm:text-2xl font-black text-blue-400 mt-0.5 sm:mt-1 font-mono">{visitLogs.length}</span>
+              <span className="text-stone-400 text-[8px] sm:text-[9px] mt-0.5">تۆماری مێژوویی</span>
+            </div>
+
+            <div className="bg-[#101012] border border-stone-850 p-3 sm:p-4 rounded-2xl flex flex-col items-center justify-center text-center">
+              <span className="text-stone-500 text-[9px] sm:text-[10px] uppercase font-bold tracking-wider">ئامارەکانی کات</span>
+              <span className="text-base sm:text-lg font-bold text-stone-200 mt-1 sm:mt-1.5 font-sans">ڕاستەوخۆ</span>
+              <span className="text-stone-400 text-[8px] sm:text-[9px] mt-0.5">١٠٠٪ کۆنترۆڵکراو</span>
+            </div>
+          </div>
+
+          {/* Core Analytics: Two columns layout */}
+          <div className="grid grid-cols-1 gap-5 sm:gap-8 lg:grid-cols-12">
+            
+            {/* Interactive Traffic Trend Line Chart */}
+            <div className="lg:col-span-7 bg-[#101012] border border-stone-800/80 rounded-2xl p-4 sm:p-6 flex flex-col">
+              <div className="border-b border-stone-800 pb-2.5 mb-4 sm:mb-6 flex items-center justify-between flex-row-reverse">
+                <h3 className="text-stone-100 text-xs sm:text-sm font-bold font-sans">📈 هێڵکاری ترافیکی بینەران (٧ ڕۆژی ڕابردوو)</h3>
+                <span className="text-[9px] sm:text-[10px] bg-blue-500/10 border border-blue-500/20 text-blue-400 px-2 py-0.5 rounded-lg">ڕاستەوخۆ</span>
+              </div>
+
+              {/* Draw Custom interactive SVG Line chart */}
+              {(() => {
+                const last7Days = Array.from({ length: 7 }, (_, i) => {
+                  const d = new Date();
+                  d.setDate(d.getDate() - i);
+                  return d.toISOString().split("T")[0];
+                }).reverse();
+
+                const trafficData = last7Days.map(dateStr => {
+                  const count = visitLogs.filter(log => log.enteredAt && log.enteredAt.startsWith(dateStr)).length;
+                  return { date: dateStr, count };
+                });
+
+                const counts = trafficData.map(t => t.count);
+                const maxCount = Math.max(...counts, 4); // avoid division by zero or flat charts
+                
+                // SVG points generation
+                const width = 500;
+                const height = 180;
+                const paddingLeft = 30;
+                const paddingRight = 20;
+                const paddingTop = 15;
+                const paddingBottom = 25;
+                
+                const usableWidth = width - paddingLeft - paddingRight;
+                const usableHeight = height - paddingTop - paddingBottom;
+                
+                // Generate X and Y coordinates
+                const points = trafficData.map((t, idx) => {
+                  const x = paddingLeft + (idx / 6) * usableWidth;
+                  const y = paddingTop + usableHeight - (t.count / maxCount) * usableHeight;
+                  return { x, y, count: t.count, date: t.date };
+                });
+
+                // Generate path instruction string
+                const pathStr = points.reduce((acc, p, idx) => {
+                  return acc + `${idx === 0 ? "M" : "L"} ${p.x} ${p.y}`;
+                }, "");
+
+                // Area instruction string
+                const areaStr = pathStr ? `${pathStr} L ${points[points.length - 1].x} ${height - paddingBottom} L ${points[0].x} ${height - paddingBottom} Z` : "";
+
+                const activeDay = selectedDayIndex !== null ? trafficData[selectedDayIndex] : null;
+
+                return (
+                  <div className="flex flex-col flex-1 justify-between gap-4 sm:gap-6">
+                    <div className="relative w-full flex justify-center bg-stone-950/40 border border-stone-900 rounded-xl p-3 sm:p-4">
+                      <svg viewBox={`0 0 ${width} ${height}`} className="w-full h-auto overflow-visible select-none">
+                        <defs>
+                          <linearGradient id="chartGradient" x1="0" y1="0" x2="0" y2="1">
+                            <stop offset="0%" stopColor="#eab308" stopOpacity="0.25"/>
+                            <stop offset="100%" stopColor="#eab308" stopOpacity="0"/>
+                          </linearGradient>
+                        </defs>
+                        
+                        {/* Grid lines */}
+                        {[0, 0.25, 0.5, 0.75, 1].map((ratio, idx) => {
+                          const y = paddingTop + ratio * usableHeight;
+                          return (
+                            <line 
+                              key={idx}
+                              x1={paddingLeft} 
+                              y1={y} 
+                              x2={width - paddingRight} 
+                              y2={y} 
+                              stroke="#1e1e24" 
+                              strokeWidth="0.5" 
+                              strokeDasharray="4 4"
+                            />
+                          );
+                        })}
+
+                        {/* Shaded Area */}
+                        {areaStr && <path d={areaStr} fill="url(#chartGradient)" />}
+
+                        {/* Main Trend Line */}
+                        {pathStr && (
+                          <path 
+                            d={pathStr} 
+                            fill="none" 
+                            stroke="#eab308" 
+                            strokeWidth="2.5" 
+                            strokeLinecap="round" 
+                            strokeLinejoin="round" 
+                          />
+                        )}
+
+                        {/* Interactive Nodes */}
+                        {points.map((p, idx) => {
+                          const isSelected = selectedDayIndex === idx;
+                          return (
+                            <g key={idx} className="cursor-pointer" onClick={() => setSelectedDayIndex(idx)}>
+                              <circle 
+                                cx={p.x} 
+                                cy={p.y} 
+                                r={isSelected ? 10 : 6} 
+                                fill="#eab308" 
+                                fillOpacity={isSelected ? 0.3 : 0} 
+                                className="transition-all duration-200"
+                              />
+                              <circle 
+                                cx={p.x} 
+                                cy={p.y} 
+                                r={isSelected ? 5 : 3.5} 
+                                fill={isSelected ? "#ffffff" : "#eab308"} 
+                                stroke="#070708" 
+                                strokeWidth="1.5"
+                                className="transition-all duration-200"
+                              />
+                            </g>
+                          );
+                        })}
+
+                        {/* X Axis labels */}
+                        {points.map((p, idx) => {
+                          const formattedDate = new Date(p.date).toLocaleDateString("en-US", { month: "short", day: "numeric" });
+                          return (
+                            <text 
+                              key={idx}
+                              x={p.x} 
+                              y={height - 5} 
+                              fill="#6b7280" 
+                              fontSize="8" 
+                              textAnchor="middle"
+                              className="font-mono"
+                            >
+                              {formattedDate}
+                            </text>
+                          );
+                        })}
+                      </svg>
+                    </div>
+
+                    {/* Interactive Node statistics */}
+                    <div className="bg-[#151518] rounded-xl border border-stone-850 p-3 sm:p-4 transition-all duration-300">
+                      {activeDay ? (
+                        <div className="flex items-center justify-between flex-row-reverse text-right">
+                          <div>
+                            <p className="text-[9px] sm:text-[10px] text-stone-500 font-mono">{activeDay.date}</p>
+                            <h4 className="text-stone-200 text-[11px] sm:text-xs font-bold mt-0.5">ئامارەکانی ڕۆژی دەستنیشانکراو</h4>
+                          </div>
+                          <div className="flex items-baseline gap-1 bg-yellow-500/10 text-yellow-500 px-2.5 py-1 sm:px-3 sm:py-1.5 rounded-xl font-mono">
+                            <span className="text-base sm:text-lg font-black">{activeDay.count}</span>
+                            <span className="text-[9px] sm:text-[10px]">سەردان</span>
+                          </div>
+                        </div>
+                      ) : (
+                        <p className="text-stone-400 text-[10px] sm:text-xs text-center py-1 sm:py-2">💡 کلیک لە هەر خاڵێکی سەر هێڵکارییەکە بکە بۆ بینینی ئاماری وردی ئەو ڕۆژە.</p>
+                      )}
+                    </div>
+                  </div>
+                );
+              })()}
+            </div>
+
+            {/* Platform & Devices and Categories stats (lg:col-span-5) */}
+            <div className="lg:col-span-5 flex flex-col gap-5 sm:gap-8">
+              
+              {/* Category distribution */}
+              <div className="bg-[#101012] border border-stone-800/80 rounded-2xl p-4 sm:p-6 flex flex-col justify-between">
+                <h3 className="text-stone-100 text-xs sm:text-sm font-bold border-b border-stone-800 pb-2.5 mb-4 font-sans">📊 دابەشبوونی بابەتەکان بەپێی جۆر</h3>
+                
+                {(() => {
+                  const categoryCounts: { [key: string]: number } = {};
+                  movies.forEach(m => {
+                    const cat = m.category || "فیلم";
+                    categoryCounts[cat] = (categoryCounts[cat] || 0) + 1;
+                  });
+                  const total = Math.max(movies.length, 1);
+
+                  return (
+                    <div className="space-y-4">
+                      <div className="h-2.5 w-full rounded-full bg-stone-900 overflow-hidden flex flex-row-reverse">
+                        {Object.entries(categoryCounts).map(([cat, count], idx) => {
+                          const percent = (count / total) * 100;
+                          const bgClass = idx === 0 ? "bg-yellow-500" : idx === 1 ? "bg-emerald-500" : idx === 2 ? "bg-sky-500" : "bg-purple-500";
+                          return (
+                            <div 
+                              key={cat} 
+                              style={{ width: `${percent}%` }} 
+                              className={`${bgClass} h-full transition-all`}
+                              title={`${cat}: ${count}`}
+                            />
+                          );
+                        })}
+                      </div>
+
+                      <div className="grid grid-cols-2 gap-2 sm:gap-3.5 pt-1.5">
+                        {Object.entries(categoryCounts).map(([cat, count], idx) => {
+                          const percent = Math.round((count / total) * 100);
+                          const borderClass = idx === 0 ? "border-yellow-500/20" : idx === 1 ? "border-emerald-500/20" : idx === 2 ? "border-sky-500/20" : "border-purple-500/20";
+                          const dotClass = idx === 0 ? "bg-yellow-500" : idx === 1 ? "bg-emerald-500" : idx === 2 ? "bg-sky-500" : "bg-purple-500";
+
+                          return (
+                            <div key={cat} className={`border ${borderClass} bg-[#141416]/50 p-2 sm:p-2.5 rounded-xl flex items-center justify-between flex-row-reverse text-right`}>
+                              <div className="flex items-center gap-1 sm:gap-1.5 flex-row-reverse">
+                                <span className={`h-1.5 w-1.5 sm:h-2 sm:w-2 rounded-full ${dotClass}`} />
+                                <span className="text-[10px] sm:text-xs text-stone-300 font-bold font-sans">{cat}</span>
+                              </div>
+                              <div className="text-left">
+                                <span className="text-stone-200 text-[10px] sm:text-xs font-semibold font-mono">{count} </span>
+                                <span className="text-stone-500 text-[8px] sm:text-[9px] font-mono">({percent}%)</span>
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  );
+                })()}
+              </div>
+
+              {/* Devices distribution */}
+              <div className="bg-[#101012] border border-stone-800/80 rounded-2xl p-4 sm:p-6 flex flex-col justify-between">
+                <h3 className="text-stone-100 text-xs sm:text-sm font-bold border-b border-stone-800 pb-2.5 mb-4 font-sans">📱 جۆری ئامێری بەکارهێنەران و وێبگەڕەکان</h3>
+
+                {(() => {
+                  let mobileCount = 0;
+                  let desktopCount = 0;
+                  visitLogs.forEach(log => {
+                    const ua = (log.userAgent || "").toLowerCase();
+                    if (ua.includes("mobi") || ua.includes("android") || ua.includes("iphone") || ua.includes("ipad")) {
+                      mobileCount++;
+                    } else {
+                      desktopCount++;
+                    }
+                  });
+                  const total = Math.max(mobileCount + desktopCount, 1);
+                  const mobilePercent = Math.round((mobileCount / total) * 100);
+                  const desktopPercent = 100 - mobilePercent;
+
+                  return (
+                    <div className="space-y-3.5">
+                      <div className="flex flex-col gap-1">
+                        <div className="flex justify-between text-[10px] sm:text-xs flex-row-reverse text-right">
+                          <span className="text-stone-300 font-bold font-sans flex items-center gap-1 flex-row-reverse"><Laptop size={11} className="sm:w-3 sm:h-3" /> کۆمپیوتەر و دێسکتۆپ</span>
+                          <span className="text-stone-200 font-semibold font-mono">{desktopPercent}% ({desktopCount} جار)</span>
+                        </div>
+                        <div className="h-1.5 w-full bg-stone-900 rounded-full overflow-hidden">
+                          <div className="h-full bg-emerald-500 rounded-full transition-all" style={{ width: `${desktopPercent}%` }} />
+                        </div>
+                      </div>
+
+                      <div className="flex flex-col gap-1">
+                        <div className="flex justify-between text-[10px] sm:text-xs flex-row-reverse text-right">
+                          <span className="text-stone-300 font-bold font-sans flex items-center gap-1 flex-row-reverse"><Smartphone size={11} className="sm:w-3 sm:h-3" /> مۆبایل و تابلێت</span>
+                          <span className="text-stone-200 font-semibold font-mono">{mobilePercent}% ({mobileCount} جار)</span>
+                        </div>
+                        <div className="h-1.5 w-full bg-stone-900 rounded-full overflow-hidden">
+                          <div className="h-full bg-yellow-500 rounded-full transition-all" style={{ width: `${mobilePercent}%` }} />
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })()}
+              </div>
+
+            </div>
+          </div>
+
+          {/* Interactive Genre Distribution list */}
+          <div className="bg-[#101012] border border-stone-800/80 rounded-2xl p-4 sm:p-6">
+            <div className="border-b border-stone-800 pb-2.5 mb-4 sm:mb-6 flex items-center justify-between flex-row-reverse">
+              <h3 className="text-stone-100 text-xs sm:text-sm font-bold font-sans">🎭 جۆرەکانی فیلم (کلیک بکە بۆ فلتەرکردن)</h3>
+              {selectedGenre && (
+                <button 
+                  onClick={() => setSelectedGenre(null)}
+                  className="text-[9px] sm:text-[10px] text-yellow-400 bg-yellow-500/10 hover:bg-yellow-500/20 px-2 py-0.5 sm:px-2.5 sm:py-1 rounded-lg transition-all cursor-pointer font-bold"
+                >
+                  نیشاندانی هەمووی
+                </button>
+              )}
+            </div>
+
+            {(() => {
+              const genreCounts: { [key: string]: number } = {};
+              movies.forEach(m => {
+                if (m.genre) {
+                  m.genre.split(/[,،]/).forEach(g => {
+                    const cleanG = g.trim();
+                    if (cleanG) {
+                      genreCounts[cleanG] = (genreCounts[cleanG] || 0) + 1;
+                    }
+                  });
+                }
+              });
+
+              const sortedGenres = Object.entries(genreCounts)
+                .sort((a, b) => b[1] - a[1])
+                .slice(0, 10); // Top 10 genres
+
+              const maxGenreCount = Math.max(...sortedGenres.map(g => g[1]), 1);
+
+              return (
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-5 sm:gap-8">
+                  {/* Left panel */}
+                  <div className="space-y-2 sm:space-y-3">
+                    {sortedGenres.map(([genreName, count]) => {
+                      const isSelected = selectedGenre === genreName;
+                      const percent = (count / maxGenreCount) * 100;
+                      return (
+                        <div 
+                          key={genreName}
+                          onClick={() => setSelectedGenre(genreName === selectedGenre ? null : genreName)}
+                          className={`p-2 sm:p-2.5 rounded-xl border border-stone-900 hover:bg-[#151518]/60 cursor-pointer transition-all flex items-center justify-between gap-3 sm:gap-4 flex-row-reverse text-right ${
+                            isSelected ? "bg-[#1d1b13] border-yellow-500/40" : "bg-[#0c0c0e]/40"
+                          }`}
+                        >
+                          <span className="text-[10px] sm:text-xs font-bold text-stone-200 min-w-[60px] sm:min-w-[70px] font-sans">{genreName}</span>
+                          
+                          <div className="flex-1 h-2 sm:h-2.5 bg-stone-900 rounded-full overflow-hidden relative">
+                            <div 
+                              className={`h-full rounded-full transition-all duration-500 ${
+                                isSelected ? "bg-gradient-to-l from-yellow-500 to-yellow-400 shadow-[0_0_8px_rgba(234,179,8,0.4)]" : "bg-stone-800"
+                              }`}
+                              style={{ width: `${percent}%` }}
+                            />
+                          </div>
+
+                          <span className="text-[10px] sm:text-xs text-stone-400 font-semibold font-mono min-w-[15px] sm:min-w-[20px] text-left">{count}</span>
+                        </div>
+                      );
+                    })}
+                  </div>
+
+                  {/* Right panel */}
+                  <div className="bg-stone-950/40 rounded-2xl border border-stone-900 p-3 sm:p-4 min-h-[220px] sm:min-h-[300px] flex flex-col">
+                    <h4 className="text-[10px] sm:text-xs font-bold text-stone-300 border-b border-stone-900 pb-2 mb-2.5 font-sans">
+                      {selectedGenre ? `فیلمەکان لە جۆری: ${selectedGenre}` : "دەستپێک: فیلمە بڵاوکراوەکان بەپێی جۆر"}
+                    </h4>
+                    
+                    {(() => {
+                      const genreMovies = selectedGenre 
+                        ? movies.filter(m => m.genre && m.genre.includes(selectedGenre))
+                        : movies.slice(0, 5);
+
+                      return (
+                        <div className="flex-1 overflow-y-auto space-y-1.5 max-h-[200px] sm:max-h-[280px] pr-1">
+                          {genreMovies.length === 0 ? (
+                            <div className="h-full flex items-center justify-center text-stone-500 text-[10px] sm:text-xs py-10">هیچ فیلمێک نەدۆزرایەوە.</div>
+                          ) : (
+                            genreMovies.map(m => (
+                              <div key={m.id} className="flex items-center justify-between p-1.5 sm:p-2 rounded-lg sm:rounded-xl bg-stone-900/60 border border-stone-850 gap-2 sm:gap-3 flex-row-reverse text-right">
+                                <div className="flex items-center gap-2 sm:gap-3 flex-row-reverse min-w-0">
+                                  <img src={m.posterUrl} alt="" className="h-8 w-5 sm:h-9 sm:w-6 object-cover rounded border border-stone-800 bg-stone-950 shrink-0" referrerPolicy="no-referrer" />
+                                  <div className="min-w-0">
+                                    <h5 className="text-[11px] sm:text-xs font-semibold text-stone-200 truncate font-sans">{m.title}</h5>
+                                    <p className="text-[9px] sm:text-[10px] text-stone-500 mt-0.5 font-sans">{m.category} • {m.year}</p>
+                                  </div>
+                                </div>
+                                <div className="flex items-center gap-1 shrink-0">
+                                  <span className="text-yellow-500 text-[9px] sm:text-[10px] font-mono font-bold bg-yellow-500/10 px-1.5 py-0.5 rounded-lg">⭐ {m.rating}</span>
+                                </div>
+                              </div>
+                            ))
+                          )}
+                        </div>
+                      );
+                    })()}
+                  </div>
+                </div>
+              );
+            })()}
           </div>
 
         </div>

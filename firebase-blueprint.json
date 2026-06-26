@@ -123,9 +123,27 @@
         "enteredAt": { "type": "string", "format": "date-time" }
       },
       "required": ["sessionId", "userId", "userName", "enteredAt"]
+    },
+    "Moderator": {
+      "title": "Moderator",
+      "description": "Represents an assistant administrator with specific action permissions",
+      "type": "object",
+      "properties": {
+        "email": { "type": "string", "description": "The email address of the moderator" },
+        "role": { "type": "string" },
+        "canPublish": { "type": "boolean" },
+        "canEdit": { "type": "boolean" },
+        "createdAt": { "type": "string" },
+        "addedBy": { "type": "string" }
+      },
+      "required": ["email", "canPublish", "canEdit"]
     }
   },
   "firestore": {
+    "/moderators/{email}": {
+      "schema": "Moderator",
+      "description": "Assistant moderators invited by the superadmin"
+    },
     "/movies/{movieId}": {
       "schema": "Movie",
       "description": "The movies and series collection managed by the site admin"

@@ -1,7 +1,8 @@
 import { useState, useRef, useEffect } from "react";
-import { Film, Send, LogIn, LogOut, User, Activity, Settings, ChevronDown } from "lucide-react";
+import { Film, Send, LogIn, LogOut, User, Activity, Settings, ChevronDown, Star, Search, X } from "lucide-react";
 import { User as FirebaseUser } from "firebase/auth";
 import NotificationCenter from "./NotificationCenter";
+import { Movie } from "../types";
 
 interface NavbarProps {
   user: FirebaseUser | null;
@@ -15,6 +16,8 @@ interface NavbarProps {
   showAdminPanel: boolean;
   searchQuery: string;
   setSearchQuery: (query: string) => void;
+  movies: Movie[];
+  onMovieClick: (movie: Movie) => void;
 }
 
 export default function Navbar({
@@ -29,15 +32,28 @@ export default function Navbar({
   showAdminPanel,
   searchQuery,
   setSearchQuery,
+  movies = [],
+  onMovieClick,
 }: NavbarProps) {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
+  const [showLiveResults, setShowLiveResults] = useState(false);
+  const [showLiveResultsMobile, setShowLiveResultsMobile] = useState(false);
+  
   const dropdownRef = useRef<HTMLDivElement>(null);
+  const searchContainerRef = useRef<HTMLDivElement>(null);
+  const searchContainerMobileRef = useRef<HTMLDivElement>(null);
 
-  // Close dropdown when clicking outside
+  // Close dropdowns when clicking outside
   useEffect(() => {
     function handleClickOutside(event: MouseEvent) {
       if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
         setIsMenuOpen(false);
+      }
+      if (searchContainerRef.current && !searchContainerRef.current.contains(event.target as Node)) {
+        setShowLiveResults(false);
+      }
+      if (searchContainerMobileRef.current && !searchContainerMobileRef.current.contains(event.target as Node)) {
+        setShowLiveResultsMobile(false);
       }
     }
     document.addEventListener("mousedown", handleClickOutside);
@@ -45,6 +61,17 @@ export default function Navbar({
       document.removeEventListener("mousedown", handleClickOutside);
     };
   }, []);
+
+  // Filter movies in real-time
+  const trimmedQuery = searchQuery.trim();
+  const filteredLiveMovies = trimmedQuery === "" 
+    ? [] 
+    : movies.filter(movie => 
+        movie.title.toLowerCase().includes(trimmedQuery.toLowerCase()) ||
+        (movie.genre && movie.genre.toLowerCase().includes(trimmedQuery.toLowerCase())) ||
+        (movie.category && movie.category.toLowerCase().includes(trimmedQuery.toLowerCase()))
+      );
+
   return (
     <header className="sticky top-0 z-50 w-full border-b border-stone-800 bg-[#0c0c0d]/90 backdrop-blur-md">
       <div className="mx-auto flex max-w-7xl items-center justify-between px-4 py-4 md:px-6">
@@ -72,32 +99,106 @@ export default function Navbar({
           </a>
         </div>
 
-        {/* Center: Live Real-time Search input */}
-        <div className="hidden max-w-md flex-1 px-8 md:block ltr-dir">
+        {/* Center: Live Real-time Instant Search Input */}
+        <div className="hidden max-w-md flex-1 px-8 md:block ltr-dir relative" ref={searchContainerRef}>
           <div className="relative">
             <input
               type="text"
               placeholder="بگەڕێ بۆ فیلم یان زنجیرە..."
               value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full rounded-full border border-stone-800 bg-[#141416] py-2 pl-4 pr-10 text-right text-sm text-stone-100 placeholder-stone-500 transition-all focus:border-yellow-500/50 focus:outline-none focus:ring-1 focus:ring-yellow-500/30"
+              onFocus={() => setShowLiveResults(true)}
+              onChange={(e) => {
+                setSearchQuery(e.target.value);
+                setShowLiveResults(true);
+              }}
+              className="w-full rounded-full border border-stone-800 bg-[#141416] py-2 pl-10 pr-10 text-right text-sm text-stone-100 placeholder-stone-500 transition-all focus:border-yellow-500/50 focus:outline-none focus:ring-1 focus:ring-yellow-500/30"
             />
             <div className="absolute inset-y-0 right-0 flex items-center pr-3 pointer-events-none text-stone-500">
-              <svg
-                className="h-4 w-4"
-                fill="none"
-                stroke="currentColor"
-                viewBox="0 0 24 24"
-              >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth="2"
-                  d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"
-                />
-              </svg>
+              <Search size={16} />
             </div>
+            {searchQuery && (
+              <button
+                onClick={() => {
+                  setSearchQuery("");
+                  setShowLiveResults(false);
+                }}
+                className="absolute inset-y-0 left-0 flex items-center pl-3 text-stone-500 hover:text-white cursor-pointer"
+              >
+                <X size={15} />
+              </button>
+            )}
           </div>
+
+          {/* Live Search Instant Dropdown list */}
+          {showLiveResults && trimmedQuery !== "" && (
+            <div className="absolute top-full left-4 right-4 mt-2 max-h-[380px] overflow-y-auto rounded-2xl border border-stone-800 bg-[#0d0d0f]/95 backdrop-blur-xl p-2.5 shadow-[0_12px_40px_rgba(0,0,0,0.8)] z-50 text-right animate-in fade-in slide-in-from-top-2 duration-200">
+              <div className="px-3 py-1.5 border-b border-stone-900 mb-2 flex items-center justify-between text-[10px] text-stone-400 font-sans flex-row-reverse">
+                <span>ئەنجامەکانی گەڕانی ڕاستەوخۆ ({filteredLiveMovies.length})</span>
+                <button 
+                  onClick={() => { setSearchQuery(""); setShowLiveResults(false); }} 
+                  className="hover:text-yellow-400 transition-colors cursor-pointer text-stone-500"
+                >
+                  پاککردنەوە
+                </button>
+              </div>
+
+              {filteredLiveMovies.length === 0 ? (
+                <div className="py-8 text-center text-xs text-stone-500 font-sans">
+                  هیچ ئەنجامێک نەدۆزرایەوە بۆ "{searchQuery}"
+                </div>
+              ) : (
+                <div className="space-y-1">
+                  {filteredLiveMovies.slice(0, 6).map((movie) => (
+                    <button
+                      key={movie.id}
+                      onClick={() => {
+                        onMovieClick(movie);
+                        setShowLiveResults(false);
+                        setSearchQuery("");
+                      }}
+                      className="w-full flex items-center gap-3 p-2 rounded-xl hover:bg-[#1a1a1f] transition-all duration-150 text-right group cursor-pointer flex-row-reverse"
+                    >
+                      {/* Poster thumbnail */}
+                      <div className="h-12 w-9 rounded-lg overflow-hidden border border-stone-800 shrink-0 bg-stone-900 relative">
+                        {movie.posterUrl ? (
+                          <img src={movie.posterUrl} alt="" className="h-full w-full object-cover group-hover:scale-105 transition-transform duration-200" referrerPolicy="no-referrer" />
+                        ) : (
+                          <div className="h-full w-full flex items-center justify-center text-[10px] text-stone-600">🎬</div>
+                        )}
+                      </div>
+
+                      {/* Info */}
+                      <div className="flex-1 min-w-0 flex flex-col justify-center">
+                        <h4 className="text-xs font-bold text-stone-100 group-hover:text-yellow-400 transition-colors truncate font-sans">
+                          {movie.title}
+                        </h4>
+                        <div className="flex items-center gap-2 mt-1 text-[10px] text-stone-400 font-sans flex-row-reverse">
+                          <span className="px-1.5 py-0.5 rounded bg-stone-900 text-stone-300 text-[9px] font-bold shrink-0">
+                            {movie.category}
+                          </span>
+                          <span>•</span>
+                          <span className="shrink-0">{movie.year}</span>
+                          <span>•</span>
+                          <span className="text-stone-500 truncate max-w-[120px]">{movie.genre}</span>
+                        </div>
+                      </div>
+
+                      {/* Rating */}
+                      <div className="flex items-center gap-1 bg-yellow-500/10 text-yellow-500 px-1.5 py-0.5 rounded-lg text-[10px] font-bold font-mono shrink-0">
+                        <Star size={10} className="fill-current shrink-0" />
+                        <span>{movie.rating}</span>
+                      </div>
+                    </button>
+                  ))}
+                  {filteredLiveMovies.length > 6 && (
+                    <div className="text-center py-1.5 border-t border-stone-900 mt-1.5">
+                      <span className="text-[10px] text-stone-500 font-sans">بۆ بینینی هەموو ئەنجامەکان پەلە بکە لە نووسین...</span>
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          )}
         </div>
 
         {/* Left side: Navigation links, Telegram & Admin Authentication */}
@@ -117,7 +218,7 @@ export default function Navbar({
           {isAdmin && (
             <button
               onClick={onAdminPanelToggle}
-              className={`flex items-center gap-1.5 rounded-full px-4 py-2 text-xs font-semibold transition-all duration-200 ${
+              className={`flex items-center gap-1.5 rounded-full px-4 py-2 text-xs font-semibold transition-all duration-200 cursor-pointer ${
                 showAdminPanel
                   ? "bg-yellow-500 text-stone-950 hover:bg-yellow-400"
                   : "bg-[#27272a] text-stone-200 hover:bg-[#3f3f46]"
@@ -138,7 +239,7 @@ export default function Navbar({
             <div className="relative" ref={dropdownRef}>
               <button
                 onClick={() => setIsMenuOpen(!isMenuOpen)}
-                className="flex items-center gap-1.5 rounded-full border border-stone-800 bg-[#121214] pl-2 pr-3 py-1.5 text-xs text-stone-300 transition-all hover:bg-stone-900 hover:text-white"
+                className="flex items-center gap-1.5 rounded-full border border-stone-800 bg-[#121214] pl-2 pr-3 py-1.5 text-xs text-stone-300 transition-all hover:bg-stone-900 hover:text-white cursor-pointer"
               >
                 <ChevronDown size={14} className={`text-stone-500 transition-transform ${isMenuOpen ? "rotate-180" : ""}`} />
                 <span className="max-w-[70px] truncate font-sans font-medium">{customDisplayName || user.displayName || "بەکارهێنەر"}</span>
@@ -146,7 +247,7 @@ export default function Navbar({
                   <img
                     src={customPhotoURL || user.photoURL || undefined}
                     alt="avatar"
-                    className="h-6 w-6 rounded-full border border-yellow-500/30"
+                    className="h-6 w-6 rounded-full border border-yellow-500/30 object-cover"
                     referrerPolicy="no-referrer"
                   />
                 ) : (
@@ -171,7 +272,7 @@ export default function Navbar({
                       onEditProfileClick();
                       setIsMenuOpen(false);
                     }}
-                    className="flex w-full items-center justify-end gap-2.5 rounded-lg px-3 py-2 text-right text-xs text-stone-300 hover:bg-stone-900 hover:text-yellow-400 transition-colors font-sans"
+                    className="flex w-full items-center justify-end gap-2.5 rounded-lg px-3 py-2 text-right text-xs text-stone-300 hover:bg-stone-900 hover:text-yellow-400 transition-colors font-sans cursor-pointer"
                   >
                     <span>ڕێکخستنەکانی ئەکاونت</span>
                     <Settings size={14} />
@@ -182,7 +283,7 @@ export default function Navbar({
                       onLogoutClick();
                       setIsMenuOpen(false);
                     }}
-                    className="flex w-full items-center justify-end gap-2.5 rounded-lg px-3 py-2 text-right text-xs text-red-400 hover:bg-red-500/10 transition-colors font-sans"
+                    className="flex w-full items-center justify-end gap-2.5 rounded-lg px-3 py-2 text-right text-xs text-red-400 hover:bg-red-500/10 transition-colors font-sans cursor-pointer"
                   >
                     <span>دەرچوون لە ئەکاونت</span>
                     <LogOut size={14} />
@@ -193,7 +294,7 @@ export default function Navbar({
           ) : (
             <button
               onClick={onLoginClick}
-              className="flex items-center gap-1.5 rounded-full border border-stone-800 bg-[#121214] px-4 py-2 text-xs font-medium text-stone-300 transition-all hover:bg-stone-900 hover:text-white"
+              className="flex items-center gap-1.5 rounded-full border border-stone-800 bg-[#121214] px-4 py-2 text-xs font-medium text-stone-300 transition-all hover:bg-stone-900 hover:text-white cursor-pointer"
             >
               <LogIn size={14} className="text-yellow-400" />
               <span className="font-sans">چوونەژوورەوە</span>
@@ -203,32 +304,100 @@ export default function Navbar({
       </div>
 
       {/* Sub header search bar for mobile devices */}
-      <div className="block px-4 pb-4 md:hidden">
+      <div className="block px-4 pb-4 md:hidden relative" ref={searchContainerMobileRef}>
         <div className="relative ltr-dir">
           <input
             type="text"
             placeholder="بگەڕێ بۆ فیلم یان زنجیرە..."
             value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            className="w-full rounded-full border border-stone-800 bg-[#141416] py-2 pl-4 pr-10 text-right text-sm text-stone-100 placeholder-stone-500 focus:border-yellow-500/50 focus:outline-none"
+            onFocus={() => setShowLiveResultsMobile(true)}
+            onChange={(e) => {
+              setSearchQuery(e.target.value);
+              setShowLiveResultsMobile(true);
+            }}
+            className="w-full rounded-full border border-stone-800 bg-[#141416] py-2 pl-10 pr-10 text-right text-sm text-stone-100 placeholder-stone-500 focus:border-yellow-500/50 focus:outline-none"
           />
           <div className="absolute inset-y-0 right-0 flex items-center pr-3 pointer-events-none text-stone-500">
-            <svg
-              className="h-4 w-4"
-              fill="none"
-              stroke="currentColor"
-              viewBox="0 0 24 24"
-            >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth="2"
-                d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"
-              />
-            </svg>
+            <Search size={16} />
           </div>
+          {searchQuery && (
+            <button
+              onClick={() => {
+                setSearchQuery("");
+                setShowLiveResultsMobile(false);
+              }}
+              className="absolute inset-y-0 left-0 flex items-center pl-3 text-stone-500 hover:text-white cursor-pointer"
+            >
+              <X size={15} />
+            </button>
+          )}
         </div>
+
+        {/* Live Search Instant Dropdown list (Mobile) */}
+        {showLiveResultsMobile && trimmedQuery !== "" && (
+          <div className="absolute top-full left-4 right-4 mt-2 max-h-[320px] overflow-y-auto rounded-2xl border border-stone-800 bg-[#0d0d0f]/95 backdrop-blur-xl p-2.5 shadow-[0_12px_40px_rgba(0,0,0,0.8)] z-50 text-right animate-in fade-in slide-in-from-top-2 duration-200">
+            <div className="px-3 py-1.5 border-b border-stone-900 mb-2 flex items-center justify-between text-[10px] text-stone-400 font-sans flex-row-reverse">
+              <span>ئەنجامەکانی گەڕانی ڕاستەوخۆ ({filteredLiveMovies.length})</span>
+              <button 
+                onClick={() => { setSearchQuery(""); setShowLiveResultsMobile(false); }} 
+                className="hover:text-yellow-400 transition-colors cursor-pointer text-stone-500"
+              >
+                پاککردنەوە
+              </button>
+            </div>
+
+            {filteredLiveMovies.length === 0 ? (
+              <div className="py-8 text-center text-xs text-stone-500 font-sans">
+                هیچ ئەنجامێک نەدۆزرایەوە بۆ "{searchQuery}"
+              </div>
+            ) : (
+              <div className="space-y-1">
+                {filteredLiveMovies.slice(0, 5).map((movie) => (
+                  <button
+                    key={movie.id}
+                    onClick={() => {
+                      onMovieClick(movie);
+                      setShowLiveResultsMobile(false);
+                      setSearchQuery("");
+                    }}
+                    className="w-full flex items-center gap-3 p-2 rounded-xl hover:bg-[#1a1a1f] transition-all duration-150 text-right group cursor-pointer flex-row-reverse"
+                  >
+                    {/* Poster thumbnail */}
+                    <div className="h-10 w-7 rounded-lg overflow-hidden border border-stone-800 shrink-0 bg-stone-900 relative">
+                      {movie.posterUrl ? (
+                        <img src={movie.posterUrl} alt="" className="h-full w-full object-cover" referrerPolicy="no-referrer" />
+                      ) : (
+                        <div className="h-full w-full flex items-center justify-center text-[10px] text-stone-600">🎬</div>
+                      )}
+                    </div>
+
+                    {/* Info */}
+                    <div className="flex-1 min-w-0 flex flex-col justify-center">
+                      <h4 className="text-xs font-bold text-stone-100 group-hover:text-yellow-400 transition-colors truncate font-sans">
+                        {movie.title}
+                      </h4>
+                      <div className="flex items-center gap-1.5 mt-0.5 text-[9px] text-stone-400 font-sans flex-row-reverse">
+                        <span className="px-1 py-0.2 rounded bg-stone-900 text-stone-300 text-[8px] font-bold shrink-0">
+                          {movie.category}
+                        </span>
+                        <span>•</span>
+                        <span>{movie.year}</span>
+                      </div>
+                    </div>
+
+                    {/* Rating */}
+                    <div className="flex items-center gap-1 bg-yellow-500/10 text-yellow-500 px-1 py-0.2 rounded-lg text-[9px] font-bold font-mono shrink-0">
+                      <Star size={9} className="fill-current shrink-0" />
+                      <span>{movie.rating}</span>
+                    </div>
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
       </div>
     </header>
   );
 }
+

@@ -16,7 +16,8 @@ import {
   signInWithEmailAndPassword, 
   updateProfile,
   signInWithPopup,
-  GoogleAuthProvider
+  GoogleAuthProvider,
+  sendPasswordResetEmail
 } from "firebase/auth";
 import { auth, googleProvider } from "../firebase";
 
@@ -27,7 +28,7 @@ interface AuthModalProps {
 }
 
 export default function AuthModal({ isOpen, onClose, onSuccess }: AuthModalProps) {
-  const [mode, setMode] = useState<"signin" | "signup">("signin");
+  const [mode, setMode] = useState<"signin" | "signup" | "forgot">("signin");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [displayName, setDisplayName] = useState("");
@@ -70,6 +71,35 @@ export default function AuthModal({ isOpen, onClose, onSuccess }: AuthModalProps
     setSuccess(null);
 
     const emailTrimmed = email.trim();
+
+    if (mode === "forgot") {
+      if (!emailTrimmed) {
+        setError("تکایە ئیمەیڵەکەت بنووسە.");
+        setIsLoading(false);
+        return;
+      }
+      try {
+        await sendPasswordResetEmail(auth, emailTrimmed);
+        setSuccess("نامەی گۆڕینی پاسۆرد نێردرا بۆ ئیمەیڵەکەت! تکایە سەیری ئیمەیڵەکەت یان بەشی سپام (Spam) بکە.");
+        setEmail("");
+      } catch (err: any) {
+        console.error("Forgot Password Error:", err);
+        switch (err.code) {
+          case "auth/user-not-found":
+            setError("هیچ ئەکاونتێک بەم ئیمەیڵە تۆمار نەکراوە.");
+            break;
+          case "auth/invalid-email":
+            setError("ئیمەیڵەکە دروست نییە. تکایە ئیمەیڵێکی ڕاست بنووسە.");
+            break;
+          default:
+            setError(err.message || "هەڵەیەک ڕوویدا لە کاتی ناردنی بەستەری نوێکردنەوە.");
+        }
+      } finally {
+        setIsLoading(false);
+      }
+      return;
+    }
+
     const passwordTrimmed = password;
 
     if (!emailTrimmed || !passwordTrimmed) {
@@ -170,10 +200,10 @@ export default function AuthModal({ isOpen, onClose, onSuccess }: AuthModalProps
           
           <div className="flex items-center gap-2">
             <span className="font-display font-bold text-sm text-stone-200">
-              {mode === "signin" ? "چوونەژوورەوە بۆ ئەکاونت" : "دروستکردنی ئەکاونتی نوێ"}
+              {mode === "signin" ? "چوونەژوورەوە بۆ ئەکاونت" : mode === "signup" ? "دروستکردنی ئەکاونتی نوێ" : "نوێکردنەوەی پاسۆرد"}
             </span>
             <div className="rounded-full bg-yellow-500/10 p-1.5 text-yellow-500 text-xs">
-              {mode === "signin" ? <LogIn size={14} /> : <UserPlus size={14} />}
+              {mode === "signin" ? <LogIn size={14} /> : mode === "signup" ? <UserPlus size={14} /> : <Key size={14} />}
             </div>
           </div>
         </div>
@@ -189,7 +219,9 @@ export default function AuthModal({ isOpen, onClose, onSuccess }: AuthModalProps
             <p className="text-[11px] text-stone-400 font-sans">
               {mode === "signin" 
                 ? "بەخێربێیتەوە! تکایە بچۆ ژوورەوە بۆ بینینی لایڤ ستریم" 
-                : "ئەکاونتی نوێ دروستبکە بۆ هەڵگرتن و بینینی نایابترین تەنەر و فیلمەکان"}
+                : mode === "signup"
+                ? "ئەکاونتی نوێ دروستبکە بۆ هەڵگرتن و بینینی نایابترین تەنەر و فیلمەکان"
+                : "تکایە ناونیشانی ئیمەیڵەکەت بنووسە بۆ ناردنی بەستەری گۆڕینی پاسۆرد"}
             </p>
           </div>
 
@@ -250,22 +282,35 @@ export default function AuthModal({ isOpen, onClose, onSuccess }: AuthModalProps
               </div>
             </div>
 
-            <div className="space-y-1.5">
-              <label className="block text-right text-xs font-semibold text-stone-400 font-sans">پاسوۆرد:</label>
-              <div className="relative">
-                <input
-                  type="password"
-                  required
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  placeholder="••••••••"
-                  className="w-full text-left text-xs rounded-xl border border-stone-800 bg-[#141417] pl-3 pr-10 py-3 text-stone-100 placeholder-stone-600 focus:border-yellow-500/50 focus:outline-none focus:ring-1 focus:ring-yellow-500/20 transition-all font-sans"
-                />
-                <div className="absolute inset-y-0 right-0 flex items-center pr-3 pointer-events-none text-stone-650">
-                  <Key size={14} />
+            {mode !== "forgot" && (
+              <div className="space-y-1.5">
+                <div className="flex items-center justify-between flex-row-reverse">
+                  <label className="block text-right text-xs font-semibold text-stone-400 font-sans">پاسوۆرد:</label>
+                  {mode === "signin" && (
+                    <button
+                      type="button"
+                      onClick={() => { setMode("forgot"); setError(null); setSuccess(null); }}
+                      className="text-[11px] text-yellow-405 text-yellow-400 hover:underline hover:text-yellow-300 font-bold font-sans cursor-pointer"
+                    >
+                      پاسۆردت لەبیرچووە؟
+                    </button>
+                  )}
+                </div>
+                <div className="relative">
+                  <input
+                    type="password"
+                    required
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    placeholder="••••••••"
+                    className="w-full text-left text-xs rounded-xl border border-stone-800 bg-[#141417] pl-3 pr-10 py-3 text-stone-100 placeholder-stone-600 focus:border-yellow-500/50 focus:outline-none focus:ring-1 focus:ring-yellow-500/20 transition-all font-sans"
+                  />
+                  <div className="absolute inset-y-0 right-0 flex items-center pr-3 pointer-events-none text-stone-650">
+                    <Key size={14} />
+                  </div>
                 </div>
               </div>
-            </div>
+            )}
 
             {/* Email Submit Button */}
             <button
@@ -280,59 +325,79 @@ export default function AuthModal({ isOpen, onClose, onSuccess }: AuthModalProps
                   <LogIn size={14} />
                   <span>چوونەژوورەوە</span>
                 </>
-              ) : (
+              ) : mode === "signup" ? (
                 <>
                   <UserPlus size={14} />
                   <span>دروستکردنی ئەکاونت</span>
+                </>
+              ) : (
+                <>
+                  <Mail size={14} />
+                  <span>ناردنی بەستەری نوێکردنەوە</span>
                 </>
               )}
             </button>
           </form>
 
-          {/* Social login divider */}
-          <div className="relative flex items-center justify-center py-2">
-            <div className="absolute inset-0 flex items-center">
-              <div className="w-full border-t border-stone-900" />
-            </div>
-            <span className="relative bg-[#0d0d10] px-3.5 text-[10px] text-stone-550 font-bold uppercase tracking-wider font-sans">
-              یان بە شێوازی تر
-            </span>
-          </div>
+          {mode !== "forgot" && (
+            <>
+              {/* Social login divider */}
+              <div className="relative flex items-center justify-center py-2">
+                <div className="absolute inset-0 flex items-center">
+                  <div className="w-full border-t border-stone-900" />
+                </div>
+                <span className="relative bg-[#0d0d10] px-3.5 text-[10px] text-stone-550 font-bold uppercase tracking-wider font-sans">
+                  یان بە شێوازی تر
+                </span>
+              </div>
 
-          {/* Google SSO */}
-          <button
-            onClick={handleGoogleLogin}
-            disabled={isLoading}
-            className="w-full rounded-xl border border-stone-850 bg-stone-950 hover:bg-stone-900 hover:border-stone-800 text-stone-200 px-4 py-3 text-xs font-semibold flex items-center justify-center gap-2.5 transition-all duration-200 cursor-pointer disabled:opacity-50"
-          >
-            <svg className="h-4 w-4" viewBox="0 0 24 24">
-              <path
-                fill="#EA4335"
-                d="M5.266 9.765A7.077 7.077 0 0 1 12 4.909c1.69 0 3.218.6 4.418 1.582L19.91 3C17.782 1.145 15.055 0 12 0 7.336 0 3.332 2.682 1.386 6.614l3.88 3.151z"
-              />
-              <path
-                fill="#4285F4"
-                d="M23.518 12.303c0-.822-.074-1.614-.21-2.383H12v4.545h6.486a5.543 5.543 0 0 1-2.405 3.636l3.755 2.91c2.195-2.023 3.473-5.005 3.473-8.708z"
-              />
-              <path
-                fill="#FBBC05"
-                d="M5.266 14.235A7.077 7.077 0 0 1 4.909 12c0-.795.127-1.56.357-2.265l-3.88-3.151C.48 8.659 0 10.273 0 12s.481 3.341 1.386 5.416l3.88-3.181z"
-              />
-              <path
-                fill="#34A853"
-                d="M12 24c3.24 0 5.955-1.077 7.94-2.915l-3.755-2.91c-1.04.695-2.373 1.108-4.185 1.108-3.218 0-5.945-2.176-6.918-5.1"
-              />
-            </svg>
-            <span className="font-sans">چوونەژوورەوە بە ئەکاونتی گووگڵ</span>
-          </button>
+              {/* Google SSO */}
+              <button
+                onClick={handleGoogleLogin}
+                disabled={isLoading}
+                className="w-full rounded-xl border border-stone-850 bg-stone-950 hover:bg-stone-900 hover:border-stone-800 text-stone-200 px-4 py-3 text-xs font-semibold flex items-center justify-center gap-2.5 transition-all duration-200 cursor-pointer disabled:opacity-50"
+              >
+                <svg className="h-4 w-4" viewBox="0 0 24 24">
+                  <path
+                    fill="#EA4335"
+                    d="M5.266 9.765A7.077 7.077 0 0 1 12 4.909c1.69 0 3.218.6 4.418 1.582L19.91 3C17.782 1.145 15.055 0 12 0 7.336 0 3.332 2.682 1.386 6.614l3.88 3.151z"
+                  />
+                  <path
+                    fill="#4285F4"
+                    d="M23.518 12.303c0-.822-.074-1.614-.21-2.383H12v4.545h6.486a5.543 5.543 0 0 1-2.405 3.636l3.755 2.91c2.195-2.023 3.473-5.005 3.473-8.708z"
+                  />
+                  <path
+                    fill="#FBBC05"
+                    d="M5.266 14.235A7.077 7.077 0 0 1 4.909 12c0-.795.127-1.56.357-2.265l-3.88-3.151C.48 8.659 0 10.273 0 12s.481 3.341 1.386 5.416l3.88-3.181z"
+                  />
+                  <path
+                    fill="#34A853"
+                    d="M12 24c3.24 0 5.955-1.077 7.94-2.915l-3.755-2.91c-1.04.695-2.373 1.108-4.185 1.108-3.218 0-5.945-2.176-6.918-5.1"
+                  />
+                </svg>
+                <span className="font-sans">چوونەژوورەوە بە ئەکاونتی گووگڵ</span>
+              </button>
+            </>
+          )}
 
           {/* Toggle Modes */}
           <div className="text-center text-xs font-sans text-stone-400 mt-2">
-            {mode === "signin" ? (
+            {mode === "forgot" ? (
+              <span>
+                گەڕانەوە بۆ{" "}
+                <button 
+                  type="button"
+                  onClick={() => { setMode("signin"); setError(null); setSuccess(null); }}
+                  className="text-yellow-405 font-bold text-yellow-400 hover:underline cursor-pointer"
+                >
+                  بچۆ ژوورەوە
+                </button>
+              </span>
+            ) : mode === "signin" ? (
               <span>
                 تا ئێستا ئەکاونتت نییە؟{" "}
                 <button 
-                  onClick={() => { setMode("signup"); setError(null); }}
+                  onClick={() => { setMode("signup"); setError(null); setSuccess(null); }}
                   className="text-yellow-405 font-bold text-yellow-400 hover:underline cursor-pointer"
                 >
                   ئەکاونتێکی نوێ دروست بکە
@@ -342,7 +407,7 @@ export default function AuthModal({ isOpen, onClose, onSuccess }: AuthModalProps
               <span>
                 پێشتر ئەکاونتت دروستکردووە؟{" "}
                 <button 
-                  onClick={() => { setMode("signin"); setError(null); }}
+                  onClick={() => { setMode("signin"); setError(null); setSuccess(null); }}
                   className="text-yellow-405 font-bold text-yellow-400 hover:underline cursor-pointer"
                 >
                   بچۆ ژوورەوە

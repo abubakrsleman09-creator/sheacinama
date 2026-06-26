@@ -22,6 +22,7 @@ export default function App() {
   const [customPhotoURL, setCustomPhotoURL] = useState<string | null>(null);
   const [customDisplayName, setCustomDisplayName] = useState<string | null>(null);
   const [isAdmin, setIsAdmin] = useState(false);
+  const [userPermissions, setUserPermissions] = useState<{ canPublish: boolean; canEdit: boolean } | null>(null);
   const [movies, setMovies] = useState<Movie[]>([]);
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedMovie, setSelectedMovie] = useState<Movie | null>(null);
@@ -225,19 +226,68 @@ export default function App() {
     }
   };
 
-  // Authenticate Admin based on email (abubakrsleman09@gmail.com)
+  // Authenticate Admin based on email and moderators collection
   useEffect(() => {
+    let unsubMod: (() => void) | null = null;
+    
     const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
       setUser(currentUser);
-      if (currentUser?.email === "abubakrsleman09@gmail.com") {
-        setIsAdmin(true);
-      } else {
-        // Also check if local storage has manual admin bypass
-        const bypassActive = localStorage.getItem("shea_admin_bypass") === "true";
-        setIsAdmin(currentUser?.email === "abubakrsleman09@gmail.com" || bypassActive);
+      
+      // Clean up previous moderator snapshot listener if any
+      if (unsubMod) {
+        unsubMod();
+        unsubMod = null;
       }
+
+      if (!currentUser) {
+        setIsAdmin(false);
+        setUserPermissions(null);
+        return;
+      }
+
+      if (currentUser.email === "abubakrsleman09@gmail.com") {
+        setIsAdmin(true);
+        setUserPermissions({ canPublish: true, canEdit: true });
+        return;
+      }
+
+      // Check if they are in the moderators collection in real-time
+      const moderatorDocRef = doc(db, "moderators", currentUser.email || "");
+      unsubMod = onSnapshot(moderatorDocRef, (docSnap) => {
+        if (docSnap.exists()) {
+          const data = docSnap.data();
+          setIsAdmin(true);
+          setUserPermissions({
+            canPublish: !!data.canPublish,
+            canEdit: !!data.canEdit
+          });
+        } else {
+          // Check local storage bypass
+          const bypassActive = localStorage.getItem("shea_admin_bypass") === "true";
+          if (bypassActive) {
+            setIsAdmin(true);
+            setUserPermissions({ canPublish: true, canEdit: true });
+          } else {
+            setIsAdmin(false);
+            setUserPermissions(null);
+          }
+        }
+      }, (err) => {
+        console.warn("Moderator lookup failed:", err);
+        const bypassActive = localStorage.getItem("shea_admin_bypass") === "true";
+        setIsAdmin(bypassActive);
+        if (bypassActive) {
+          setUserPermissions({ canPublish: true, canEdit: true });
+        } else {
+          setUserPermissions(null);
+        }
+      });
     });
-    return () => unsubscribe();
+
+    return () => {
+      unsubscribe();
+      if (unsubMod) unsubMod();
+    };
   }, []);
 
   // Real-time synchronization for custom user profile from Firestore
@@ -548,6 +598,8 @@ export default function App() {
         showAdminPanel={showAdminPanel}
         searchQuery={searchQuery}
         setSearchQuery={setSearchQuery}
+        movies={movies}
+        onMovieClick={(movie) => setSelectedMovie(movie)}
       />
 
       {/* Main Content Areas */}
@@ -557,6 +609,7 @@ export default function App() {
           <AdminPanel
             user={user}
             isAdmin={isAdmin}
+            userPermissions={userPermissions}
             movies={movies}
             onMovieSaved={() => {}}
             onEditMovie={(movie) => {
